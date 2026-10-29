@@ -1,0 +1,24 @@
+#include <windows.h>
+// Versioned unsigned PE used only by the updater test process, never as an installer.
+1 VERSIONINFO
+ FILEVERSION 3,25,146,10
+ PRODUCTVERSION 3,25,146,10
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+BEGIN
+ BLOCK "StringFileInfo"
+ BEGIN
+  BLOCK "040904b0"
+  BEGIN
+   VALUE "FileDescription", "Ditto updater test fixture"
+   VALUE "FileVersion", "3.25.146.10"
+   VALUE "ProductName", "Ditto ARM64     "
+  END
+ END
+ BLOCK "VarFileInfo"
+ BEGIN
+  VALUE "Translation", 0x409, 1200
+ END
+END

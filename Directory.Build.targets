@@ -1,0 +1,14 @@
+<Project>
+  <!-- Keep the developer's local directory out of the shipped PE debug record.
+       PDB files stay in local build output and are not included in packages. -->
+  <ItemDefinitionGroup Condition="'$(Platform)'=='ARM64'">
+    <ClCompile>
+      <!-- MSVC's prefix mapping keeps __FILE__ diagnostic strings relative.
+           The extra backslash escapes the trailing slash before the quote. -->
+      <AdditionalOptions>%(AdditionalOptions) /d1trimfile:&quot;$(MSBuildThisFileDirectory)\&quot;</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>%(AdditionalOptions) /PDBALTPATH:%_PDB%</AdditionalOptions>
+    </Link>
+  </ItemDefinitionGroup>
+</Project>

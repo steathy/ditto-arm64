@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 2,
+  "appId": "steathy.ditto-arm64",
+  "platform": "windows",
+  "architecture": "arm64",
+  "channels": {
+    "stable": null,
+    "beta": null
+  }
+}

@@ -1,0 +1,27 @@
+#include <windows.h>
+#include "../Arm64BuildInfo.h"
+1 RT_MANIFEST "UpdateHelper.manifest"
+1 VERSIONINFO
+ FILEVERSION DITTO_ARM64_VERSION_NUMBERS
+ PRODUCTVERSION DITTO_ARM64_VERSION_NUMBERS
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+BEGIN
+ BLOCK "StringFileInfo"
+ BEGIN
+  BLOCK "040904b0"
+  BEGIN
+   VALUE "FileDescription", "Ditto ARM64 Update Helper"
+   VALUE "FileVersion", DITTO_ARM64_VERSION_STRING
+   VALUE "ProductName", "Ditto ARM64 Update Helper"
+   VALUE "ProductVersion", DITTO_ARM64_VERSION_STRING
+   VALUE "OriginalFilename", "DittoUpdate.exe"
+  END
+ END
+ BLOCK "VarFileInfo"
+ BEGIN
+  VALUE "Translation", 0x409, 1200
+ END
+END
