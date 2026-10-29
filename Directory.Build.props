@@ -1,0 +1,7 @@
+<Project>
+  <!-- Use a 64-bit compiler host so the MFC PCH has sufficient address space. -->
+  <PropertyGroup Condition="'$(Platform)'=='ARM64'">
+    <PreferredToolArchitecture Condition="'$(PreferredToolArchitecture)'=='' And ('$(PROCESSOR_ARCHITECTURE)'=='ARM64' Or '$(PROCESSOR_ARCHITEW6432)'=='ARM64')">arm64</PreferredToolArchitecture>
+    <PreferredToolArchitecture Condition="'$(PreferredToolArchitecture)'==''">x64</PreferredToolArchitecture>
+  </PropertyGroup>
+</Project>
