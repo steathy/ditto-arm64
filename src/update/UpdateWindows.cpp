@@ -409,6 +409,31 @@ std::wstring RegisteredInstallDirectory() {
     std::wstring result(path); while (!result.empty() && (result.back() == L'\\' || result.back() == L'/')) result.pop_back();
     return result;
 }
+std::shared_ptr<void> LaunchInstallerProcess(const std::wstring& installer, const std::wstring& parameters) {
+    auto directory = fs::path(installer).parent_path().wstring();
+    SHELLEXECUTEINFOW launch{}; launch.cbSize = sizeof(launch);
+    // Without NO_UI, a shell error can wait inside an invisible dialog before
+    // returning to our recovery code. Security/UAC prompts are not suppressed.
+    launch.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    launch.lpVerb = L"runas"; launch.lpFile = installer.c_str();
+    launch.lpParameters = parameters.c_str(); launch.lpDirectory = directory.c_str();
+    launch.nShow = SW_SHOWNORMAL;
+    SetLastError(ERROR_SUCCESS);
+    if (!ShellExecuteExW(&launch)) {
+        const DWORD error = GetLastError();
+        if (error == ERROR_CANCELLED) throw Error("Installation permission was cancelled (Windows error 1223). Your existing Ditto will restart.");
+        wchar_t detail[2048]{};
+        FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr,
+            error, 0, detail, static_cast<DWORD>(std::size(detail)), nullptr);
+        std::wstring reason(detail);
+        while (!reason.empty() && (reason.back() == L'\r' || reason.back() == L'\n' || reason.back() == L' ')) reason.pop_back();
+        throw Error("Windows could not launch the verified installer (Windows error " + std::to_string(error)
+            + ", shell result " + std::to_string(reinterpret_cast<intptr_t>(launch.hInstApp)) + ")."
+            + (reason.empty() || !error ? "" : " " + Utf8(reason)));
+    }
+    if (!launch.hProcess) throw Error("Windows did not return an installer process. Installation could not be monitored.");
+    return OwnHandle(launch.hProcess);
+}
 void CheckAndDownload(Session& session, const CheckOptions& options, Transport& transport, InstallerVerifier& verifier) {
     std::wstring partial;
     try {
@@ -499,9 +524,10 @@ void LaunchInstallHelper(const Snapshot& ready, const std::wstring& executable, 
     auto ticket = directory + L"\\install.json";
     WriteNewFile(ticket, "{\"schemaVersion\":3,\"unsignedConsent\":" + std::string(unsignedConsent ? "1" : "0") + ",\"channel\":" + JsonQuote(Wide(ChannelKey(ready.release.channel))) + ",\"parentPid\":" + std::to_string(parentPid) + ",\"mainWindow\":" + std::to_string(mainWindow) + ",\"executable\":" + JsonQuote(executable) + ",\"database\":" + JsonQuote(database) + ",\"manifest\":" + JsonQuote(ready.manifestPath) + ",\"installer\":" + JsonQuote(ready.installerPath) + "}");
     std::wstring command = L"\"" + helper + L"\" --install \"" + ticket + L"\"";
-    STARTUPINFOW startup{}; startup.cb = sizeof(startup); startup.dwFlags = STARTF_USESHOWWINDOW; startup.wShowWindow = SW_HIDE;
+    // This is a GUI helper with no console. Its first error dialog must be visible.
+    STARTUPINFOW startup{}; startup.cb = sizeof(startup); startup.dwFlags = STARTF_USESHOWWINDOW; startup.wShowWindow = SW_SHOWNORMAL;
     PROCESS_INFORMATION process{};
-    WinCheck(CreateProcessW(helper.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, directory.c_str(), &startup, &process), "Could not start the update helper");
+    WinCheck(CreateProcessW(helper.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr, directory.c_str(), &startup, &process), "Could not start the update helper");
     CloseHandle(process.hThread);
     auto helperProcess = OwnHandle(process.hProcess);
     WaitForSingleObject(helperProcess.get(), INFINITE);

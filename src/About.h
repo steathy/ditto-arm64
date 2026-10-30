@@ -27,8 +27,6 @@ public:
 	//{{AFX_DATA(CAbout)
 	enum { IDD = IDD_ABOUT };
 	CButton		m_CheckUpdate;
-	CHyperLink	m_HyperLink;
-	CHyperLink	m_UpstreamLink;
 	CHyperLink m_Arm64RepositoryName;
 	CHyperLink m_UpstreamRepositoryName;
 	CHListBox	m_List;

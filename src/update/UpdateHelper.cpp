@@ -5,6 +5,7 @@
 #include <objbase.h>
 #include "UpdateCore.h"
 #include <filesystem>
+#include <cstdio>
 
 using namespace ditto_update;
 namespace fs = std::filesystem;
@@ -14,6 +15,42 @@ std::shared_ptr<void> Handle(HANDLE h) {
     return {h, [](void* value) { CloseHandle(value); }};
 }
 bool SamePath(const std::wstring& a, const std::wstring& b) { return _wcsicmp(fs::path(a).lexically_normal().c_str(), fs::path(b).lexically_normal().c_str()) == 0; }
+class InstallLog {
+    std::shared_ptr<void> file;
+public:
+    std::wstring path;
+    void Open(const fs::path& directory) {
+        auto target = (directory / L"install.log").wstring();
+        RejectReparsePath(target);
+        HANDLE raw = CreateFileW(FileApiPath(target).c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+            CREATE_NEW, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        if (raw == INVALID_HANDLE_VALUE) throw Error("Cannot create the update log (Windows error " + std::to_string(GetLastError()) + "). Installation was not started.");
+        file = {raw, [](void* value) { CloseHandle(value); }}; path = target;
+    }
+    void Write(const std::string& message) noexcept {
+        if (!file) return;
+        try {
+            SYSTEMTIME time{}; GetSystemTime(&time);
+            char prefix[64];
+            sprintf_s(prefix, "%04u-%02u-%02uT%02u:%02u:%02u.%03uZ ", time.wYear, time.wMonth,
+                time.wDay, time.wHour, time.wMinute, time.wSecond, time.wMilliseconds);
+            auto line = std::string(prefix) + message + "\r\n";
+            size_t offset = 0;
+            while (offset < line.size()) {
+                DWORD written = 0;
+                if (!WriteFile(file.get(), line.data() + offset, static_cast<DWORD>(line.size() - offset), &written, nullptr) || !written) return;
+                offset += written;
+            }
+            FlushFileBuffers(file.get());
+        } catch (...) { /* Logging must never prevent recovery after a failure. */ }
+    }
+    void InspectPath(const char* label, const std::wstring& target) {
+        DWORD attributes = GetFileAttributesW(FileApiPath(target).c_str());
+        DWORD error = attributes == INVALID_FILE_ATTRIBUTES ? GetLastError() : ERROR_SUCCESS;
+        Write(std::string(label) + ": " + Utf8(target) + " (attributes=" + std::to_string(attributes)
+            + ", Windows error=" + std::to_string(error) + ")");
+    }
+};
 void Restart(const std::wstring& executable) {
     std::wstring command = L"\"" + executable + L"\"";
     STARTUPINFOW startup{}; startup.cb = sizeof(startup); startup.dwFlags = STARTF_USESHOWWINDOW; startup.wShowWindow = SW_HIDE;
@@ -92,6 +129,7 @@ void Backup(const std::wstring& application, const std::wstring& database,
 }
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     std::wstring executable, backup;
+    InstallLog log;
     bool stopped = false;
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     try {
@@ -106,6 +144,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         fs::path ticketPath(argv[2]);
         if (ticketPath.filename() != L"install.json" || ticketPath.parent_path().filename().wstring().rfind(L"install-", 0) != 0
             || !SamePath(ticketPath.parent_path().parent_path().wstring(), PrivateCacheRoot())) throw Error("Invalid install handoff location.");
+        log.Open(ticketPath.parent_path());
+        log.Write("Update helper started.");
+        STARTUPINFOW startupInfo{}; startupInfo.cb = sizeof(startupInfo); GetStartupInfoW(&startupInfo);
+        log.Write("Startup flags=" + std::to_string(startupInfo.dwFlags) + ", showWindow=" + std::to_string(startupInfo.wShowWindow)
+            + ", Windows build=" + std::to_string(WindowsBuild()) + ".");
+        wchar_t currentDirectory[32768];
+        DWORD currentLength = GetCurrentDirectoryW(static_cast<DWORD>(std::size(currentDirectory)), currentDirectory);
+        if (currentLength && currentLength < std::size(currentDirectory)) log.InspectPath("Working directory", currentDirectory);
         auto ticket = ParseJson(ConsumeInstallTicket(argv[2]));
         if (ticket.At("schemaVersion").Number() != 3) throw Error("Unsupported update handoff.");
         auto consent = ticket.At("unsignedConsent").Number();
@@ -132,6 +178,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         // Keep this handle through UAC, setup and process exit. It denies writes
         // and replacement of the exact file whose hash/signature were verified.
         auto installer = LockFile(installerPath); std::atomic_bool cancel(false);
+        log.Write("Verifying installer " + manifest.release.version.String() + ".");
         VerifyHash(installer.get(), manifest.release, cancel);
         VerifyPublisher(installer.get(), installerPath, manifest.release.version, L"Ditto ARM64", unsignedConsent);
         {
@@ -140,39 +187,44 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         }
         auto startup = StartupCommand();
         backup = PrivateCacheRoot() + L"\\backup-" + UniqueName(); EnsurePrivateDirectory(backup);
+        log.Write("Verification passed; requesting shutdown of Ditto process " + std::to_string(pid) + ".");
         if (!PostMessageW(window, WM_CLOSE, 0, 0)) throw Error("Ditto could not be closed cleanly.");
         if (WaitForSingleObject(parent.get(), 30000) != WAIT_OBJECT_0) throw Error("Ditto is still open. Save your work and try the update again.");
         stopped = true;
+        log.Write("Ditto exited; creating backup.");
         Backup(application, database, backup, startup);
+        log.Write("Backup complete: " + Utf8(backup));
         std::wstring parameters = L"/SP- /SILENT /NORESTART /RESTARTEXITCODE=3010 /NOCLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /DIR=\"" + application + L"\" ";
         parameters += startup.empty() ? L"/TASKS=\"\"" : L"/TASKS=RunAtStartup";
-        SHELLEXECUTEINFOW launch{}; launch.cbSize = sizeof(launch);
-        launch.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
-        launch.lpVerb = L"runas"; launch.lpFile = installerPath.c_str(); launch.lpParameters = parameters.c_str();
-        // The installer displays progress and Windows owns the elevation prompt.
-        launch.nShow = SW_SHOWNORMAL;
-        std::wstring installerDirectory = fs::path(installerPath).parent_path().wstring(); launch.lpDirectory = installerDirectory.c_str();
-        if (!ShellExecuteExW(&launch)) {
-            if (GetLastError() == ERROR_CANCELLED) throw Error("Installation permission was cancelled. Your existing Ditto will restart.");
-            throw Error("Windows could not launch the verified installer.");
-        }
-        auto setup = Handle(launch.hProcess);
-        WaitForSingleObject(setup.get(), INFINITE); DWORD code = 1;
+        log.InspectPath("Installer", installerPath);
+        log.InspectPath("Installer directory", fs::path(installerPath).parent_path().wstring());
+        log.Write("Requesting Windows elevation.");
+        auto setup = LaunchInstallerProcess(installerPath, parameters);
+        log.Write("Installer started; process ID " + std::to_string(GetProcessId(setup.get())) + ".");
+        if (WaitForSingleObject(setup.get(), INFINITE) != WAIT_OBJECT_0) throw Error("Could not wait for the installer (Windows error " + std::to_string(GetLastError()) + ").");
+        DWORD code = 1;
         if (!GetExitCodeProcess(setup.get(), &code) || (code != 0 && code != 3010)) throw Error("Installer did not complete successfully (exit " + std::to_string(code) + "). The backup has been retained.");
+        log.Write("Installer completed with exit code " + std::to_string(code) + "; verifying installed application.");
         {
             auto app = LockFile(executable);
             VerifyPublisher(app.get(), executable, manifest.release.version, L"Ditto ARM64", unsignedConsent);
         }
         Restart(executable); stopped = false;
-        if (code == 3010) MessageBoxW(nullptr, L"Ditto was updated. Windows reports that a restart is needed to finish replacing some files. No restart will happen automatically.", L"Ditto ARM64 update", MB_OK | MB_ICONINFORMATION);
+        log.Write("Updated application verified and restarted.");
+        std::wstring success = L"Ditto ARM64 " + Wide(manifest.release.version.String()) + L" was updated successfully and has restarted.";
+        if (code == 3010) success += L"\n\nWindows reports that a restart is needed to finish replacing some files. No restart will happen automatically.";
+        MessageBoxW(nullptr, success.c_str(), L"Update successful", MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND);
         CoUninitialize(); return 0;
     } catch (const std::exception& error) {
+        log.Write(std::string("Failure: ") + error.what());
         std::wstring message = Wide(error.what());
         if (stopped) {
-            try { Restart(executable); } catch (const std::exception& restartError) { message += L"\n\n" + Wide(restartError.what()); }
+            try { Restart(executable); log.Write("Existing Ditto restarted after failure."); }
+            catch (const std::exception& restartError) { log.Write(std::string("Restart failed: ") + restartError.what()); message += L"\n\n" + Wide(restartError.what()); }
         }
         if (!backup.empty()) message += L"\n\nBackup location: " + backup;
-        MessageBoxW(nullptr, message.c_str(), L"Ditto ARM64 update", MB_OK | MB_ICONEXCLAMATION);
+        if (!log.path.empty()) message += L"\n\nUpdate log: " + log.path;
+        MessageBoxW(nullptr, message.c_str(), L"Ditto ARM64 update", MB_OK | MB_ICONEXCLAMATION | MB_SETFOREGROUND);
         CoUninitialize(); return 1;
     }
 }

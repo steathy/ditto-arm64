@@ -7,11 +7,10 @@ The local build/packaging scripts do not publish anything.
 
 ## User experience
 
-About displays **Ditto Windows ARM64 - github.com/steathy/ditto-arm64**, followed by
-**Ditto Windows x86/64 - github.com/sabrogden/Ditto**. Names and addresses use separate
-measured columns so the dashes/addresses align in the system's proportional font;
-both names and addresses are clickable. The original 132-dialog-unit information
-list height stays fixed. Only the controls below it flow with their content, and
+About displays the clickable project names **Ditto Windows ARM64** and
+**Ditto Windows x86/64**, each linked to its GitHub repository. Duplicate URL text
+has been removed. The original 132-dialog-unit information list height stays fixed.
+Only the controls below it flow with their content, and
 the initial status is empty and takes no space. **Check Update** fetches this fork's
 JSON feed without opening a browser. Starting Ditto or opening About makes no request.
 
@@ -56,6 +55,18 @@ The independent helper verifies the installer again, closes Ditto gracefully,
 backs up data, invokes Windows UAC, waits for Setup and restarts Ditto as the original
 unelevated user. UAC cancellation or backup/install failure restarts the previous
 client where possible. Setup displays progress and never reboots automatically.
+After setup succeeds, the installed version is verified and Ditto is restarted;
+the helper then displays **Update successful**, including the installed version.
+If setup returns 3010, that same dialog includes the Windows restart notice.
+Cancellation, failed setup, verification failure or a failed restart does not show
+success. Updates initiated by an older client still use its older helper; the new
+completion dialog applies to updates initiated from these revised builds.
+
+The helper starts with visible window defaults and suppresses ordinary Shell
+launch-error dialogs so errors return to its recovery code. UAC is still shown by
+Windows. A private `install.log` in the update handoff directory records stages,
+file paths and Windows error numbers; it does not contain clipboard contents or
+exported settings. Failure dialogs include its location.
 
 ## Feed format
 
@@ -194,16 +205,19 @@ partially updated application files; retain the backup for recovery.
 
 Nothing authorizes a Git push or publication without the maintainer's approval.
 Unsigned releases can be offered in either channel, with the same mandatory hash
-checks and per-install warning. A public end-to-end update still needs validation.
+checks and per-install warning. The maintainer confirmed a successful unsigned update from 3.25.146.8 to
+3.25.146.9 on October 30, 2026. This does not validate signed updates or every failure path.
 
 ## Verification and limits
 
-`tools/arm64/Test-Updater.ps1` runs 120 checks against the same parser, workflow,
+`tools/arm64/Test-Updater.ps1` runs 122 checks against the same parser, workflow,
 hash, file-locking and Windows verification code. Coverage includes malformed feeds
 and URLs, versions, empty/equal/older offers, unsupported modes, cancellation,
 partial/oversized/corrupt downloads, cache tampering/reuse, rollback offers,
 unsigned PE classification/consent, damaged signature rejection, single-use handoffs,
-and file/ancestor replacement locks. Ready-state fixtures
+and file/ancestor replacement locks. Missing-file and missing-directory launch
+tests reproduce the old hidden-window startup and require an error within a
+bounded timeout, preventing a regression of the invisible Shell dialog hang. Ready-state fixtures
 also cover stable/beta selection, equal-version preference, required channel slots,
 opt-in/default behavior, beta verification/cache reuse, independent rollback records,
 and switching from an installed beta to an older stable without downgrading. Fixtures
@@ -215,8 +229,9 @@ these are not successful production signature tests.
 `-LiveFeed` exercises the actual WinHTTP endpoint. On October 29, 2026 it timed out
 with Windows error 12002 on the previous stable-only endpoint; the expanded local
 suite passed. The release workflow checks public asset availability before updating
-the new feed. A real automatic installation still needs validation; signed publication also
-requires signing setup. UI, package
+the new feed. The maintainer subsequently confirmed the unsigned .8-to-.9 upgrade;
+the revised success dialog still requires a complete update initiated from a new
+client to validate it end to end. Signed publication requires signing setup. UI, package
 and local test-installation results are recorded in the repository review.
 
 ## References
