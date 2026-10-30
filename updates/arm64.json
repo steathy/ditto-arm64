@@ -17,15 +17,15 @@
       }
     },
     "beta": {
-      "version": "3.25.146.9",
-      "publishedAt": "2026-10-30T04:38:54Z",
+      "version": "3.25.146.10",
+      "publishedAt": "2026-10-30T18:13:13Z",
       "minimumWindowsBuild": 22000,
-      "releaseNotesUrl": "https://github.com/steathy/ditto-arm64/releases/tag/v3.25.146.9",
-      "releaseNotes": "Unofficial Ditto Windows ARM64 3.25.146.9 - Nightly Build (beta).\n\nBased on upstream nightly build-number-146 at a80fd3536bc407cac8cce43b5682022282ace983.\nARM64 port maintained by steathy; original Ditto by Scott Brogden, Kevin Edwards\nand the Ditto community.\n\n- Clean release with three downloads: installer, portable ZIP and complete source ZIP.\n- The source ZIP includes the pinned zlib sources; checksums are in these release notes.\n- Internal build metadata stays in the GitHub Actions artifact.\n- Separate stable and beta release branches and update channels.\n- Clipboard functionality and the updater's verification policy are unchanged from ARM64 revision 8.\n\nRequires Windows 11 on Arm. This community build is unsigned. Windows and Ditto's\nupdater may ask you to approve an unknown publisher. Full installation through the\npublic updater still requires end-to-end testing; keep a backup before testing upgrades.\nNetwork/firewall blocks affecting GitHub downloads are independent of this rebuild.",
+      "releaseNotesUrl": "https://github.com/steathy/ditto-arm64/releases/tag/v3.25.146.10",
+      "releaseNotes": "# Ditto Windows ARM64 3.25.146.10 � Nightly Build (beta)\n\nUnofficial ARM64 port by [steathy](https://github.com/steathy), based on upstream build-number-146 at a80fd3536bc407cac8cce43b5682022282ace983. Original Ditto by Scott Brogden, Kevin Edwards and the Ditto community. This fork is not affiliated with or endorsed by upstream.\n\n- Adds an **Update successful** dialog after installation, installed-version verification and Ditto restart. A required Windows restart is explained in the same dialog.\n- Keeps the two clickable About-page project names and removes the duplicate GitHub URL column. The original information list keeps its size.\n- Fixes an invisible Windows launch-error dialog that could leave the updater waiting with Ditto closed. Failures return to recovery and are logged locally with their Windows error number.\n- Preserves clipboard functionality, settings/history backups, installer hash verification and explicit consent for unsigned updates.\n\nThe completion dialog is provided by the updater that starts the installation, so updates initiated from older clients still use the older completion behavior. These builds enable the new dialog for subsequent updates.\n\nRequires Windows 11 on Arm. This unofficial community build is unsigned; installation requires accepting the publisher warning. Releases contain an installer, portable ZIP and complete source ZIP including pinned zlib sources. Checksums appear below. Native updater and isolated startup/database/ICU tests run before publication; signed updates are not yet configured.",
       "installer": {
-        "url": "https://github.com/steathy/ditto-arm64/releases/download/v3.25.146.9/DittoSetup_3.25.146.9_arm64.exe",
-        "sha256": "211d066aefb58e44467b88e061c4ce6a29da53273c9bdece565305ec294a544f",
-        "size": 7177339
+        "url": "https://github.com/steathy/ditto-arm64/releases/download/v3.25.146.10/DittoSetup_3.25.146.10_arm64.exe",
+        "sha256": "e96bcb50d25c465b127244519d8c7e8b9ae5d5efed4eab46b57db228cb8fb1f2",
+        "size": 7179631
       }
     }
   }
