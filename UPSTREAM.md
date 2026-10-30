@@ -4,8 +4,8 @@ This repository contains an unofficial Windows ARM64 port of
 [Ditto](https://github.com/sabrogden/Ditto), originally developed by Scott Brogden,
 with contributions from Kevin Edwards and the Ditto community.
 
-- Source snapshot: `a80fd3536bc407cac8cce43b5682022282ace983`.
-- Upstream source: https://github.com/sabrogden/Ditto/tree/a80fd3536bc407cac8cce43b5682022282ace983
+- Source snapshot: stable tag `3.25.113.0`, commit `81a667c790f5a6c9b6b63f187eb75e79bf159670`.
+- Upstream source: https://github.com/sabrogden/Ditto/tree/81a667c790f5a6c9b6b63f187eb75e79bf159670
 - ARM64 port and build maintainer: [steathy](https://github.com/steathy).
 - This is an independent community build, without an assertion of endorsement by
   the upstream maintainers. Upstream's signing approval does not cover this fork.
@@ -15,6 +15,9 @@ themes and bundled library sources. Machine-specific IDE files, signing material
 prebuilt utilities, legacy release automation and non-ARM64 distribution packaging
 were omitted. ARM64 build and packaging scripts replace the relevant automation.
 Upstream Git history was not imported into this initial source snapshot.
+This stable branch restores the application and bundled library sources from the
+official stable tag, then retains the ARM64 port, About page and fork updater.
+See [the stable baseline audit](docs/arm64/STABLE_BASELINE.md).
 
 ## License
 

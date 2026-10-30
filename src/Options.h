@@ -199,10 +199,6 @@ public:
 	static void		SetShowPersistent(BOOL bVal);
 	static BOOL		GetShowPersistent();
 
-	static BOOL		m_bHideDittoOnPaste;
-	static void		SetHideDittoOnPaste(BOOL bVal);
-	static BOOL		GetHideDittoOnPaste();
-
 	static void		SetShowTextForFirstTenHotKeys(BOOL bVal);
 	static BOOL		GetShowTextForFirstTenHotKeys();
 
@@ -464,10 +460,6 @@ public:
 	static BOOL		GetShowScrollBar();
 	static BOOL		m_showScrollBar;
 
-	static void		SetUseModernScrollBar(BOOL val);
-	static BOOL		GetUseModernScrollBar();
-	static BOOL		m_useModernScrollBar;
-
 	static void		SetPasteAsAdmin(BOOL val);
 	static BOOL		GetPasteAsAdmin();
 
@@ -488,9 +480,6 @@ public:
 
 	static void		SetShowInTaskBar(BOOL val);
 	static BOOL		GetShowInTaskBar();
-
-	static void		SetHideTaskbarIconOnClose(BOOL val);
-	static BOOL		GetHideTaskbarIconOnClose();
 
 	static void		SetDiffApp(CString val);
 	static CString	GetDiffApp();
@@ -730,19 +719,11 @@ public:
 	static void SetClipEditSaveDelayAfterSaveSeconds(int val);
 	static BOOL GetClipEditSaveDelayAfterSaveSeconds();
 
-	static BOOL m_bDoNotHideOnDeactivate;
-	static void SetDoNotHideOnDeactivate(BOOL val);
-	static BOOL GetDoNotHideOnDeactivate();
-
 	static BOOL SetEditWndSize(CSize size);
 	static void GetEditWndSize(CSize& size);
 
 	static BOOL SetEditWndPoint(CPoint point);
 	static void GetEditWndPoint(CPoint& point);
-
-	static BOOL m_enforceClipboardIgnoreFormats;
-	static void SetEnforceClipboardIgnoreFormats(BOOL val);
-	static BOOL GetEnforceClipboardIgnoreFormats();
 };
 
 // global for easy access and for initialization of fast access variables

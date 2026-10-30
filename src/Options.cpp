@@ -31,7 +31,6 @@ BOOL CGetSetOptions::m_bAllowDuplicates;
 BOOL CGetSetOptions::m_bUpdateTimeOnPaste;
 BOOL CGetSetOptions::m_bSaveMultiPaste;
 BOOL CGetSetOptions::m_bShowPersistent;
-BOOL CGetSetOptions::m_bHideDittoOnPaste;
 long CGetSetOptions::m_bDescTextSize;
 BOOL CGetSetOptions::m_bDescShowLeadingWhiteSpace;
 BOOL CGetSetOptions::m_bAllwaysShowDescription;
@@ -72,7 +71,6 @@ CString CGetSetOptions::m_csIniFileName;
 __int64 CGetSetOptions::nLastDbWriteTime = 0;
 CTheme CGetSetOptions::m_Theme;
 BOOL CGetSetOptions::m_showScrollBar = false;
-BOOL CGetSetOptions::m_useModernScrollBar = TRUE;
 BOOL CGetSetOptions::m_bShowAlwaysOnTopWarning = TRUE;
 CRegExFilterHelper CGetSetOptions::m_regexHelper;
 CString CGetSetOptions::m_ignoreAnnoyingCFDIB = "";
@@ -92,8 +90,6 @@ BOOL CGetSetOptions::m_refreshViewAfterPasting = TRUE;
 BOOL CGetSetOptions::m_supportAllTypes = FALSE;
 int CGetSetOptions::m_clipEditSaveDelayAfterLoadSeconds = 3;
 int CGetSetOptions::m_clipEditSaveDelayAfterSaveSeconds = 3;
-BOOL CGetSetOptions::m_bDoNotHideOnDeactivate = FALSE;
-BOOL CGetSetOptions::m_enforceClipboardIgnoreFormats = TRUE;
 
 
 CGetSetOptions::CGetSetOptions()
@@ -259,7 +255,6 @@ void CGetSetOptions::LoadSettings()
 	m_bUpdateTimeOnPaste = GetUpdateTimeOnPaste();
 	m_bSaveMultiPaste = GetSaveMultiPaste();
 	m_bShowPersistent = GetShowPersistent();
-	m_bHideDittoOnPaste = GetHideDittoOnPaste();
 	m_bDescTextSize = GetDescTextSize();
 	m_bDescShowLeadingWhiteSpace = GetDescShowLeadingWhiteSpace();
 	m_bAllwaysShowDescription = GetAllwaysShowDescription();
@@ -289,7 +284,6 @@ void CGetSetOptions::LoadSettings()
 	m_outputDebugStringLogging = GetEnableOutputDebugStringLogging();
 	m_bEnsureConnectToClipboard = GetEnsureConnectToClipboard();
 	m_showScrollBar = GetShowScrollBar();
-	m_useModernScrollBar = GetUseModernScrollBar();
 	m_bShowAlwaysOnTopWarning = GetShowAlwaysOnTopWarning();
 	m_ignoreAnnoyingCFDIB = GetIgnoreAnnoyingCFDIB();
 	m_doubleKeyStrokeTimeout = GetDoubleKeyStrokeTimeout();
@@ -300,8 +294,6 @@ void CGetSetOptions::LoadSettings()
 	m_maintainSearchView = GetMaintainSearchView();
 	m_clipEditSaveDelayAfterLoadSeconds = GetClipEditSaveDelayAfterLoadSeconds();
 	m_clipEditSaveDelayAfterSaveSeconds = GetClipEditSaveDelayAfterSaveSeconds();
-	m_bDoNotHideOnDeactivate = GetDoNotHideOnDeactivate();
-	m_enforceClipboardIgnoreFormats = GetEnforceClipboardIgnoreFormats();
 
 	GetExtraNetworkPassword(true);
 
@@ -1267,16 +1259,6 @@ void CGetSetOptions::SetShowPersistent(BOOL bVal)
 BOOL CGetSetOptions::GetShowPersistent()			
 {	
 	return GetProfileLong("ShowPersistent", 0); 
-}
-
-void CGetSetOptions::SetHideDittoOnPaste(BOOL bVal)	
-{	
-	SetProfileLong("HideDittoOnPaste", bVal); 
-	m_bHideDittoOnPaste = bVal; 
-}
-BOOL CGetSetOptions::GetHideDittoOnPaste()			
-{	
-	return GetProfileLong("HideDittoOnPaste", 1); 
 }
 
 void CGetSetOptions::SetShowTextForFirstTenHotKeys(BOOL bVal)	
@@ -2303,17 +2285,6 @@ BOOL CGetSetOptions::GetShowScrollBar()
 	return GetProfileLong(_T("ShowScrollBar"), 0);
 }
 
-void CGetSetOptions::SetUseModernScrollBar(BOOL val)
-{
-	m_useModernScrollBar = val;
-	SetProfileLong(_T("UseModernScrollBar"), val);
-}
-
-BOOL CGetSetOptions::GetUseModernScrollBar()
-{
-	return GetProfileLong(_T("UseModernScrollBar"), TRUE);
-}
-
 void CGetSetOptions::SetPasteAsAdmin(BOOL val)
 {
 	SetProfileLong(_T("PasteAsAdmin"), val);
@@ -2388,16 +2359,6 @@ void CGetSetOptions::SetShowInTaskBar(BOOL val)
 BOOL CGetSetOptions::GetShowInTaskBar()
 {
 	return GetProfileLong(_T("ShowInTaskBar"), FALSE);
-}
-
-void CGetSetOptions::SetHideTaskbarIconOnClose(BOOL val)
-{
-	SetProfileLong(_T("HideTaskbarIconOnClose"), val);
-}
-
-BOOL CGetSetOptions::GetHideTaskbarIconOnClose()
-{
-	return GetProfileLong(_T("HideTaskbarIconOnClose"), TRUE);
 }
 
 void CGetSetOptions::SetDiffApp(CString val)
@@ -2525,12 +2486,12 @@ int CGetSetOptions::GetWindowsResumeDelayReOpenDbMS()
 
 BOOL CGetSetOptions::GetShowMsgWndOnCopyToGroup()
 {
-	return GetProfileLong("ShowMsgWndOnCopyToGroup", TRUE);
+	return GetProfileLong(_T("ShowMsgWndOnCopyToGroup"), TRUE);
 }
 
 void CGetSetOptions::SetShowMsgWndOnCopyToGroup(BOOL val)
 {
-	SetProfileLong("ShowMsgWndOnCopyToGroup", val);
+	SetProfileLong(_T("ShowMsgWndOnCopyToGroup"), val);
 }
 
 int CGetSetOptions::GetActionShortCutA(DWORD action, int pos, CString refData)
@@ -3263,26 +3224,4 @@ void CGetSetOptions::GetEditWndPoint(CPoint& point)
 		point.x = 100;
 		point.y = 100;
 	}
-}
-
-void CGetSetOptions::SetDoNotHideOnDeactivate(BOOL val)
-{
-	SetProfileLong("DoNotHideOnDeactivate", val);
-	m_bDoNotHideOnDeactivate = val;
-}
-
-BOOL CGetSetOptions::GetDoNotHideOnDeactivate()
-{
-	return GetProfileLong("DoNotHideOnDeactivate", FALSE);
-}
-
-void CGetSetOptions::SetEnforceClipboardIgnoreFormats(BOOL val)
-{
-	SetProfileLong("EnforceClipboardIgnoreFormats", val);
-	m_enforceClipboardIgnoreFormats = val;
-}
-
-BOOL CGetSetOptions::GetEnforceClipboardIgnoreFormats()
-{
-	return GetProfileLong("EnforceClipboardIgnoreFormats", TRUE);
 }

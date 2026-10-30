@@ -14,7 +14,7 @@ class CMoveToGroupDlg : public CDialog
 {
 // Construction
 public:
-	CMoveToGroupDlg(CWnd* pParent = NULL, CString windowTitle = _T(""));   // standard constructor
+	CMoveToGroupDlg(CWnd* pParent = NULL);   // standard constructor
 
 // Dialog Data
 	//{{AFX_DATA(CMoveToGroupDlg)
@@ -36,7 +36,6 @@ public:
 protected:
 
 	int m_nSelectedGroup;
-	CString m_windowTitle;
 
 	// Generated message map functions
 	//{{AFX_MSG(CMoveToGroupDlg)

@@ -48,8 +48,6 @@ public:
 	void SetEnsureConnectedTimer();
 	bool ValidActiveWnd();
 
-	bool GetIgnoreClipboardChange();
-
 	DWORD m_dwLastCopy;
 
 	// Generated message map functions

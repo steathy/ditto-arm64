@@ -337,7 +337,6 @@
 #define IDC_CHECK_CLIP_TITLE            1042
 #define IDC_CHECK_SHIFT_1               1042
 #define IDC_CHECK_ACTIVE                1042
-#define IDC_BUTTON_COPY_SCRIPTS2        1042
 #define IDC_PLAY_SOUND_2                1043
 #define IDC_CHECK_MOVE_CLIPS_ON_PASTE   1043
 #define IDC_CHECK_CREATE_DATE           1043
@@ -649,8 +648,6 @@
 #define IDC_RICHEDIT21                  2172
 #define IDC_MFCLINK2                    2172
 #define IDC_EDIT_ACTIVE_APP             2173
-#define IDC_CHECK_DO_NOT_HIDE_ON_DEACTIVATE 2174
-#define IDC_BUTTON_PREVIEW_THEME        2175
 #define IDC_UPSTREAM_REPOSITORY         2176
 #define IDC_CHECK_UPDATE                2177
 #define IDC_UPDATE_STATUS               2178
@@ -882,11 +879,6 @@
 #define BUTTON_BULLET                   32995
 #define ID_BUTTONWRAP                   32996
 #define ID_IMPORT_EXPORTTOWEBSEARCH     32997
-#define ID_SPECIALPASTE_PASTENEWGUID    32998
-#define ID_SPECIALPASTE_POSIXIFY_PATHS  32999
-#define ID_MENU_SHOWSTARREDCLIPS        33000
-#define ID_SPECIALPASTE_PASTEASIMAGE    33001
-#define ID_MENU_GOTOENTRY               33002
 
 // Next default values for new objects
 //
@@ -894,7 +886,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_3D_CONTROLS                     1
 #define _APS_NEXT_RESOURCE_VALUE        394
-#define _APS_NEXT_COMMAND_VALUE         33002
+#define _APS_NEXT_COMMAND_VALUE         32998
 #define _APS_NEXT_CONTROL_VALUE         2187
 #define _APS_NEXT_SYMED_VALUE           104
 #endif
