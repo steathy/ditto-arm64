@@ -22,8 +22,9 @@ Project and updates: [steathy/ditto-arm64](https://github.com/steathy/ditto-arm6
 
 Each release has an installer, portable ZIP and source ZIP including zlib.
 Checksums are in the release notes. GitHub also adds repository-only source archives.
-Stable source is maintained on [codex/stable-3.25.113](https://github.com/steathy/ditto-arm64/tree/codex/stable-3.25.113);
-`main` retains the nightly baseline. Switching from a numerically newer nightly to
+Stable source is maintained on [main](https://github.com/steathy/ditto-arm64/tree/main);
+[nightly](https://github.com/steathy/ditto-arm64/tree/nightly) tracks upstream development.
+Switching from a numerically newer nightly to
 stable requires a deliberate manual installation; the updater never downgrades.
 
 Ditto saves clipboard history so you can search and reuse copied text, images,

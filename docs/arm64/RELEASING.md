@@ -8,8 +8,11 @@ commit IDs. No personal machine, clipboard database or signing secret is needed.
 
 ## Triggers and outputs
 
-- Pushes to `main` or `codex/**`, pull requests, and manual Actions runs build/test
+- Pushes to `main`, `nightly` or `codex/**`, pull requests, and manual Actions runs build/test
   and upload downloadable artifacts, retained for 30 days. Diagnostics last 7 days.
+- Builds targeting `main` must declare the stable channel and `releaseBranch: main`;
+  those targeting `nightly` must declare beta and `releaseBranch: nightly`.
+  Pull requests are checked against their destination branch.
 - A pushed `vMAJOR.MINOR.BUILD.REVISION` tag additionally publishes a GitHub Release.
   Its commit must already be on the `releaseBranch` declared in
   `build/source-info.json`, and the tag must exactly match both numeric
@@ -37,11 +40,13 @@ The installer bootstrapper may use Windows emulation; installed payloads are nat
 2. Commit, review and push the channel's source branch. Verify its Actions run and test the built package
    on Windows ARM64. The full interactive update/install flow remains a manual test.
 3. Create and push the matching annotated tag to the `github` remote. For example,
-   with an appropriately prepared version `3.25.146.9`:
+   after increasing the nightly version to a new, unpublished number:
 
    ```powershell
-   git tag -a v3.25.146.9 -m "Ditto Windows ARM64 3.25.146.9 beta"
-   git push github v3.25.146.9
+   git switch nightly
+   $version = (& ./tools/arm64/Get-ReleaseMetadata.ps1).version
+   git tag -a "v$version" -m "Ditto Windows ARM64 $version beta"
+   git push github "v$version"
    ```
 
 4. The workflow builds and tests again, uploads to a draft release, downloads and
@@ -53,12 +58,23 @@ The installer bootstrapper may use Windows emulation; installed payloads are nat
 5. Fetch GitHub and fast-forward local `main` to include the bot's feed commit before
    starting the next change. Push that history to Gitea to keep the review copy current.
 
-The nightly branch is `main`, pinned to upstream `build-number-146`. The stable
-branch is `codex/stable-3.25.113`, based on official release `3.25.113.0` at
+The default branch `main` builds stable, based on official release `3.25.113.0` at
 `81a667c790f5a6c9b6b63f187eb75e79bf159670`. Stable must contain that upstream
 source baseline with the ARM64 port changes; changing only the version flag is
-insufficient. The central feed remains on `main` and receives both channels.
+insufficient. The `nightly` branch is pinned to upstream `build-number-146` at
+`a80fd3536bc407cac8cce43b5682022282ace983`. The central feed remains on `main`
+and receives both channels; clients keep the same feed URL.
 An installed 3.25.146.x nightly will not auto-downgrade to a 3.25.113.x stable.
+
+Shared fixes should normally land on `main` and then be merged into `nightly`,
+retaining nightly's upstream baseline, version and beta metadata when resolving
+conflicts. Do not merge the complete development baseline into `main` merely to
+promote a nightly build. Port each new upstream stable release deliberately.
+
+The October 30, 2026 branch migration preserved commit history, published tags,
+release assets and both feed entries. Existing version numbers were not republished.
+The old `codex/stable-3.25.113` branch remains only as a historical reference for
+the original stable tag's workflow metadata; ongoing stable work belongs on `main`.
 
 The release job alone receives `contents: write`; builds and pull requests are
 read-only and do not retain Git credentials. GitHub's automatic `GITHUB_TOKEN`
