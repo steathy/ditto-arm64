@@ -1,6 +1,7 @@
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <objbase.h>
 #include "../../../src/update/UpdateCore.h"
 #include <filesystem>
 #include <iostream>
@@ -61,11 +62,45 @@ void AssertNoPartial(const std::wstring& root) {
     if (fs::exists(root)) for (const auto& entry : fs::recursive_directory_iterator(root)) if (entry.path().extension() == L".partial") partial = true;
     Require(!partial, "cancel/failure removes only its partial file");
 }
+int MissingInstallerChild(const std::wstring& path) {
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    int result = 4;
+    try { LaunchInstallerProcess(path, L""); }
+    catch (const Error& error) {
+        std::string message(error.what());
+        // Shell versions may report a missing leaf as either FILE_NOT_FOUND
+        // or PATH_NOT_FOUND. Both must retain the numeric error for diagnosis.
+        if (message.find("Windows error 2,") != message.npos || message.find("Windows error 3,") != message.npos) result = 0;
+        else std::cerr << message << '\n';
+    }
+    CoUninitialize(); return result;
+}
+void CheckMissingInstaller(const std::wstring& path) {
+    wchar_t executable[32768];
+    if (!GetModuleFileNameW(nullptr, executable, 32768)) throw Error("Cannot locate launch-test child.");
+    std::wstring command = L"\"" + std::wstring(executable) + L"\" --missing-installer \"" + path + L"\"";
+    STARTUPINFOW startup{}; startup.cb = sizeof(startup);
+    // Reproduce the old helper startup conditions: a shell error would create
+    // an invisible dialog and hang this child without SEE_MASK_FLAG_NO_UI.
+    startup.dwFlags = STARTF_USESHOWWINDOW; startup.wShowWindow = SW_HIDE;
+    PROCESS_INFORMATION child{};
+    if (!CreateProcessW(executable, command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+        nullptr, nullptr, &startup, &child)) throw Error("Cannot start launch-test child.");
+    DWORD waited = WaitForSingleObject(child.hProcess, 10000), code = 1;
+    if (waited == WAIT_OBJECT_0) GetExitCodeProcess(child.hProcess, &code);
+    else { TerminateProcess(child.hProcess, 1); WaitForSingleObject(child.hProcess, 5000); }
+    CloseHandle(child.hThread); CloseHandle(child.hProcess);
+    Require(waited == WAIT_OBJECT_0 && code == 0, "missing installer returns a numeric Windows error without an invisible-dialog hang");
+}
 }
 int wmain(int argc, wchar_t** argv) {
     try {
+        if (argc == 3 && std::wstring(argv[1]) == L"--missing-installer") return MissingInstallerChild(argv[2]);
         if (argc < 2) throw Error("Pass an isolated test directory.");
         std::wstring root = argv[1]; EnsurePrivateDirectory(root);
+        auto launchRoot = root + L"\\launch error fixture"; EnsurePrivateDirectory(launchRoot);
+        CheckMissingInstaller(launchRoot + L"\\missing-installer.exe");
+        CheckMissingInstaller(launchRoot + L"\\missing-directory\\installer.exe");
         Require(Version::Parse("3.25.146.2") < Version::Parse("3.25.146.10"), "numeric multi-digit version ordering");
         Require(Version::Parse("65535.65535.65535.65535").String() == "65535.65535.65535.65535", "version bounds");
         for (const auto* bad : {"3.2.1", "3.2.1.0.5", "3.2.1.-1", "3.2.1.65536", "03.2.1.0", "3.2.1.0-beta", "3.2.1.99999999999"}) Reject([&] { Version::Parse(bad); }, "reject malformed version");
