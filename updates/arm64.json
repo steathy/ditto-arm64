@@ -5,6 +5,17 @@
   "architecture": "arm64",
   "channels": {
     "stable": null,
-    "beta": null
+    "beta": {
+      "version": "3.25.146.8",
+      "publishedAt": "2026-10-30T03:28:10Z",
+      "minimumWindowsBuild": 22000,
+      "releaseNotesUrl": "https://github.com/steathy/ditto-arm64/releases/tag/v3.25.146.8",
+      "releaseNotes": "Unofficial Ditto Windows ARM64 3.25.146.8 - Nightly Build (beta).\n\nBased on upstream Ditto build-number-146 at a80fd3536bc407cac8cce43b5682022282ace983.\nARM64 port maintained by steathy; original Ditto by Scott Brogden, Kevin Edwards\nand the Ditto community.\n\n- Native ARM64 application, updater helper, add-in and ICU loader.\n- About-page project credits and aligned repository links, preserving the original information area.\n- Manual update checks with separate stable/beta channels, release notes, download progress and SHA-256 verification.\n- Explicit consent for unsigned updates; invalid signatures and incorrect hashes remain blocked.\n- Installer and update helper designed to preserve existing clipboard history and settings.\n\nThis prerelease is unsigned. Windows may display an unknown-publisher or SmartScreen\nwarning. Only install if you trust this community build. SignPath signing is not yet\nconfigured. Back up your clipboard database and settings before testing upgrades.\nFull installation through the public update feed still needs end-to-end testing.\n\nRequires Windows 11 on Arm. Use the setup EXE for installation or extract the entire\nportable ZIP for a separate portable profile. SHA256SUMS and corresponding source\narchives are included. See the original Ditto repository for core functionality.",
+      "installer": {
+        "url": "https://github.com/steathy/ditto-arm64/releases/download/v3.25.146.8/DittoSetup_3.25.146.8_arm64.exe",
+        "sha256": "5d328305926f5e04919531479bf36ace9e67f7ae058029491c2f31b7eaeff297",
+        "size": 7178696
+      }
+    }
   }
 }
