@@ -119,6 +119,10 @@ void WriteNewFile(const std::wstring& path, const std::string& bytes);
 std::wstring UniqueName();
 uint32_t WindowsBuild();
 std::wstring RegisteredInstallDirectory();
+// The caller must retain the verified installer lock through setup completion.
+// Ordinary shell errors return as exceptions; Windows still owns the UAC prompt.
+std::shared_ptr<void> LaunchInstallerProcess(const std::wstring& installer,
+    const std::wstring& parameters);
 
 enum class Phase { Idle, Checking, NoRelease, Current, NewerInstalled, Unsupported,
     Downloading, Verifying, Ready, Installing, Cancelled, Failed };

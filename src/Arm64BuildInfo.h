@@ -2,8 +2,8 @@
 
 // Upstream stable 3.25.113.0, followed by this ARM64 port's revision.
 // This is a community build version, not an official upstream release number.
-#define DITTO_ARM64_VERSION_NUMBERS 3,25,113,1
-#define DITTO_ARM64_VERSION_STRING "3.25.113.1"
+#define DITTO_ARM64_VERSION_NUMBERS 3,25,113,2
+#define DITTO_ARM64_VERSION_STRING "3.25.113.2"
 // Set to 0 only when preparing a validated stable release.
 #define DITTO_ARM64_NIGHTLY_BUILD 0
 #if DITTO_ARM64_NIGHTLY_BUILD

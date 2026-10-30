@@ -10,14 +10,14 @@ with or endorsed by the original Ditto project or its maintainers.
 the official stable release, pinned to commit
 [`81a667c`](https://github.com/sabrogden/Ditto/commit/81a667c790f5a6c9b6b63f187eb75e79bf159670).
 
-**This branch's ARM64 build:** `3.25.113.1` — **Stable Build**
-(upstream stable 3.25.113.0, ARM64 revision 1).
+**This branch's ARM64 build:** `3.25.113.2` — **Stable Build**
+(upstream stable 3.25.113.0, ARM64 revision 2).
 Project and updates: [steathy/ditto-arm64](https://github.com/steathy/ditto-arm64).
 
 | Download | ARM64 version | Upstream baseline |
 |---|---|---|
-| [Stable](https://github.com/steathy/ditto-arm64/releases/tag/v3.25.113.1) | 3.25.113.1 | Official stable 3.25.113.0 |
-| [Nightly / beta](https://github.com/steathy/ditto-arm64/releases/tag/v3.25.146.9) | 3.25.146.9 | Nightly build-number-146 |
+| [Stable](https://github.com/steathy/ditto-arm64/releases/tag/v3.25.113.2) | 3.25.113.2 | Official stable 3.25.113.0 |
+| [Nightly / beta](https://github.com/steathy/ditto-arm64/releases/tag/v3.25.146.10) | 3.25.146.10 | Nightly build-number-146 |
 
 Each release has an installer, portable ZIP and source ZIP including zlib.
 Checksums are in the release notes. GitHub also adds repository-only source archives.
@@ -51,7 +51,8 @@ release. See the [original project](https://github.com/sabrogden/Ditto) and its
   release notes, download progress, SHA-256/signature verification, and an
   installation prompt. Unsigned releases require an explicit warning/confirmation;
   incorrect hashes and invalid signatures are blocked. Installation uses a separate helper for backup,
-  graceful shutdown, Windows elevation and restart.
+  graceful shutdown, Windows elevation and restart, followed by a success dialog.
+  Launch errors are reported visibly and recorded in a local update log.
 
 The port retains Ditto's existing clipboard capture, history, search and paste
 features; it does not intentionally redesign their core behavior. Compatibility

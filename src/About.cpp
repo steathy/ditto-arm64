@@ -42,8 +42,6 @@ void CAbout::DoDataExchange(CDataExchange* pDX)
 	CPropertyPage::DoDataExchange(pDX);
 	//{{AFX_DATA_MAP(CAbout)
 	DDX_Control(pDX, IDC_CHECK_UPDATE, m_CheckUpdate);
-	DDX_Control(pDX, IDC_HYPER_LINK, m_HyperLink);
-	DDX_Control(pDX, IDC_UPSTREAM_REPOSITORY, m_UpstreamLink);
 	DDX_Control(pDX, IDC_ARM64_REPOSITORY_NAME, m_Arm64RepositoryName);
 	DDX_Control(pDX, IDC_UPSTREAM_REPOSITORY_NAME, m_UpstreamRepositoryName);
 	DDX_Control(pDX, IDC_LIST, m_List);
@@ -94,7 +92,11 @@ BOOL CAbout::OnInitDialog()
 #if defined(_M_ARM64)
 	m_List.AddString(_T("    Unofficial ARM64 build by steathy@github"));
 	m_List.AddString(_T("    Project: ") _T(DITTO_ARM64_REPOSITORY_URL));
+#if DITTO_ARM64_NIGHTLY_BUILD
 	m_List.AddString(_T("    Upstream: build-number-146 / a80fd35"));
+#else
+	m_List.AddString(_T("    Upstream: stable 3.25.113.0 / 81a667c"));
+#endif
 #endif
 
 	const char *SqliteVersion = sqlite3_libversion();
@@ -132,14 +134,8 @@ BOOL CAbout::OnInitDialog()
 		m_List.AddString(_T("    ") + arr[i]);
 	}
 
-	m_HyperLink.SetAutoSize(FALSE);
-	m_HyperLink.SetWindowText(_T("- github.com/steathy/ditto-arm64"));
-	m_HyperLink.SetURL(_T(DITTO_ARM64_REPOSITORY_URL));
 	m_Arm64RepositoryName.SetAutoSize(FALSE);
 	m_Arm64RepositoryName.SetURL(_T(DITTO_ARM64_REPOSITORY_URL));
-	m_UpstreamLink.SetAutoSize(FALSE);
-	m_UpstreamLink.SetWindowText(_T("- github.com/sabrogden/Ditto"));
-	m_UpstreamLink.SetURL(_T(DITTO_UPSTREAM_REPOSITORY_URL));
 	m_UpstreamRepositoryName.SetAutoSize(FALSE);
 	m_UpstreamRepositoryName.SetURL(_T(DITTO_UPSTREAM_REPOSITORY_URL));
 
@@ -252,20 +248,15 @@ void CAbout::LayoutControls()
 	// Preserve the original upstream information-list height. Update messages
 	// flow beneath it and never expand/shrink this existing control.
 	nextPixels(m_List, height(132));
-	// Two real columns keep both dashes and addresses aligned in proportional
-	// fonts, without relying on padding spaces or changing the system font.
-	int nameWidth = max(textSize(m_Arm64RepositoryName, area.Width(), DT_SINGLELINE).cx,
-		textSize(m_UpstreamRepositoryName, area.Width(), DT_SINGLELINE).cx);
-	int linkLeft = area.left + nameWidth + margin * 2;
-	auto repositoryRow = [&](CWnd& name, CWnd& link) {
-		int rowHeight = max(textSize(name, nameWidth, DT_SINGLELINE).cy,
-			textSize(link, max(1, area.right - linkLeft), DT_WORDBREAK).cy);
-		place(name, CRect(area.left, area.top, area.left + nameWidth, area.top + rowHeight));
-		place(link, CRect(linkLeft, area.top, area.right, area.top + rowHeight));
-		area.top += rowHeight + gap;
+	// Keep the clickable project names sized to their labels; each already
+	// links to its repository, so a second URL column is unnecessary.
+	auto repositoryRow = [&](CWnd& name) {
+		auto size = textSize(name, area.Width(), DT_SINGLELINE);
+		place(name, CRect(area.left, area.top, area.left + min(size.cx, area.Width()), area.top + size.cy));
+		area.top += size.cy + gap;
 	};
-	repositoryRow(m_Arm64RepositoryName, m_HyperLink);
-	repositoryRow(m_UpstreamRepositoryName, m_UpstreamLink);
+	repositoryRow(m_Arm64RepositoryName);
+	repositoryRow(m_UpstreamRepositoryName);
 	nextText(m_UpdateStatus);
 	if (m_showRelease) {
 		nextPixels(m_UpdateProgress, height(6));
