@@ -14,7 +14,7 @@ On an ARM64 laptop the script selects native ARM64 MSBuild and compiler tools. O
 
 `Directory.Build.targets` removes the local repository prefix from compiled source-file diagnostics and records only the PDB filename in shipped binaries. Packaging rejects binaries containing Windows user-directory paths. PDBs and build logs remain local. The MSVC prefix-mapping option was checked with the supported v145 compiler.
 
-`Package-Portable.ps1` creates a new timestamped folder and ZIP under `artifacts`. It bundles Ditto, its update helper, ICU_Loader, DittoUtil, language/theme data, and required ARM64 runtime DLLs from Visual Studio's redistributable directory. Every shipped EXE/DLL must have an ARM64 PE header. The package is an unsigned development build; signing and CI remain separate work.
+`Package-Portable.ps1` creates a new timestamped folder and ZIP under `artifacts`. It bundles Ditto, its update helper, ICU_Loader, DittoUtil, language/theme data, and required ARM64 runtime DLLs from Visual Studio's redistributable directory. Every shipped EXE/DLL must have an ARM64 PE header. The package is an unsigned development build; signing remains separate work. GitHub Actions runs the build, native tests and packaging on `windows-11-vs2026-arm`; see [automated releases](../../docs/arm64/RELEASING.md).
 
 To test a produced package on Windows ARM64, use the directory path printed by the packaging command:
 
