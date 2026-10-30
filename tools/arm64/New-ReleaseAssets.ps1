@@ -21,20 +21,44 @@ if ((Get-FileHash -LiteralPath $installer).Hash -ne $installerInfo.sha256) { thr
 if ((Get-Item -LiteralPath $installer).VersionInfo.FileVersion.Trim() -ne $metadata.version) { throw 'Installer version mismatch.' }
 if ((Get-AuthenticodeSignature -LiteralPath $installer).Status -ne 'NotSigned') { throw 'This workflow currently publishes unsigned development builds only.' }
 New-Item -ItemType Directory -Path $OutputDirectory | Out-Null
+$metadataDirectory = Join-Path $OutputDirectory 'metadata'
+New-Item -ItemType Directory -Path $metadataDirectory | Out-Null
 $installerName = "DittoSetup_$($metadata.version)_arm64.exe"
 Copy-Item -LiteralPath $installer -Destination (Join-Path $OutputDirectory $installerName)
 Copy-Item -LiteralPath "$PackagePath.zip" -Destination "$OutputDirectory/DittoPortable_$($metadata.version)_arm64.zip"
-Copy-Item -LiteralPath "$PackagePath/build-info.json" -Destination $OutputDirectory
+Copy-Item -LiteralPath "$PackagePath/build-info.json" -Destination $metadataDirectory
 $installerInfo.installer = $installerName
-$installerInfo | ConvertTo-Json -Depth 4 | Set-Content "$OutputDirectory/installer-info.json" -Encoding utf8NoBOM
-# The corresponding source includes the build scripts; supply the external zlib source too.
+$installerInfo | ConvertTo-Json -Depth 4 | Set-Content "$metadataDirectory/installer-info.json" -Encoding utf8NoBOM
+# One source archive contains the project, scripts and the exact external zlib sources.
 & git -C $repoRoot archive --format=zip "--prefix=ditto-arm64-$($metadata.version)/" "--output=$OutputDirectory/DittoSource_$($metadata.version).zip" HEAD
 if ($LASTEXITCODE) { throw 'Source archive failed.' }
-& git -C "$repoRoot/work/dependencies/zlib" archive --format=zip --prefix=zlib-1.3.2/ "--output=$OutputDirectory/zlib-1.3.2-source.zip" HEAD
+$zlibArchive = Join-Path $repoRoot ('work/zlib-source-' + [guid]::NewGuid().ToString('N') + '.zip')
+$zlibCommit = & git -C "$repoRoot/work/dependencies/zlib" rev-parse HEAD
+if ($LASTEXITCODE -or $zlibCommit -ne 'da607da739fa6047df13e66a2af6b8bec7c2a498') { throw 'Unexpected zlib source revision.' }
+& git -C "$repoRoot/work/dependencies/zlib" archive --format=zip "--output=$zlibArchive" HEAD
 if ($LASTEXITCODE) { throw 'zlib source archive failed.' }
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$sourceArchive = [IO.Compression.ZipFile]::Open("$OutputDirectory/DittoSource_$($metadata.version).zip", 'Update')
+$dependencyArchive = [IO.Compression.ZipFile]::OpenRead($zlibArchive)
+$prefix = "ditto-arm64-$($metadata.version)/source-dependencies/zlib/"
+$sourceHashes = [ordered]@{}
+try {
+    foreach ($item in $dependencyArchive.Entries) {
+        if ($item.FullName.EndsWith('/')) { continue }
+        $inputStream = $item.Open()
+        $destination = $sourceArchive.CreateEntry($prefix + $item.FullName, 'Optimal').Open()
+        try { $inputStream.CopyTo($destination) } finally { $inputStream.Dispose(); $destination.Dispose() }
+        $inputStream = $item.Open()
+        $hasher = [Security.Cryptography.SHA256]::Create()
+        try { $sourceHashes[$item.FullName] = [Convert]::ToHexString($hasher.ComputeHash($inputStream)).ToLowerInvariant() }
+        finally { $inputStream.Dispose(); $hasher.Dispose() }
+    }
+    $writer = [IO.StreamWriter]::new($sourceArchive.CreateEntry($prefix + '.ditto-source.json').Open())
+    try { $writer.Write((@{commit=$zlibCommit;files=$sourceHashes} | ConvertTo-Json -Depth 4)) } finally { $writer.Dispose() }
+} finally { $dependencyArchive.Dispose(); $sourceArchive.Dispose() }
 $notes = if (Test-Path $metadata.notesPath) { (Get-Content $metadata.notesPath -Raw).Trim() } else { "Ditto Windows ARM64 $($metadata.version) development build." }
 if ([Text.Encoding]::UTF8.GetByteCount($notes) -gt 8192) { throw 'Release notes exceed the updater limit of 8 KiB.' }
-[IO.File]::WriteAllText("$OutputDirectory/release-notes.md", $notes + "`n")
+[IO.File]::WriteAllText("$metadataDirectory/release-notes.md", $notes + "`n")
 $entry = [ordered]@{
     version = $metadata.version
     publishedAt = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
@@ -47,11 +71,15 @@ $entry = [ordered]@{
         size = (Get-Item -LiteralPath $installer).Length
     }
 }
-$entry | ConvertTo-Json -Depth 5 | Set-Content "$OutputDirectory/update-entry.json" -Encoding utf8NoBOM
-[ordered]@{version=$metadata.version;tag=$metadata.tag;channel=$metadata.channel;sourceCommit=$commit;signed=$false} |
-    ConvertTo-Json | Set-Content "$OutputDirectory/release-info.json" -Encoding utf8NoBOM
+$entry | ConvertTo-Json -Depth 5 | Set-Content "$metadataDirectory/update-entry.json" -Encoding utf8NoBOM
+[ordered]@{version=$metadata.version;tag=$metadata.tag;channel=$metadata.channel;sourceCommit=$commit;upstreamCommit=$metadata.upstreamCommit;upstreamTag=$metadata.upstreamTag;releaseBranch=$metadata.releaseBranch;signed=$false} |
+    ConvertTo-Json | Set-Content "$metadataDirectory/release-info.json" -Encoding utf8NoBOM
 $checksums = Get-ChildItem -LiteralPath $OutputDirectory -File | Sort-Object Name | ForEach-Object {
     '{0}  {1}' -f (Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant(), $_.Name
 }
-[IO.File]::WriteAllLines("$OutputDirectory/SHA256SUMS", [string[]]$checksums)
+[IO.File]::WriteAllLines("$metadataDirectory/SHA256SUMS", [string[]]$checksums)
+$body = @($notes, '', '## SHA-256 checksums', '', '```text') + $checksums + @('```', '',
+    'The source ZIP includes the pinned zlib sources. Build metadata remains in the Actions artifact.',
+    'GitHub also provides its automatic repository-only source archives below.')
+[IO.File]::WriteAllLines("$metadataDirectory/release-body.md", [string[]]$body)
 Write-Output "Prepared $($metadata.channel) $($metadata.version) assets in $OutputDirectory"

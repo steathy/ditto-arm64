@@ -8,7 +8,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\arm64\Build-Arm6
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\arm64\Package-Portable.ps1
 ```
 
-`Build-Arm64.ps1` fetches zlib 1.3.2 at verified commit `da607da739fa6047df13e66a2af6b8bec7c2a498`, builds it with CMake/Ninja and the matching dynamic CRT, and builds `CP_Main_10.sln`. Git and network access are needed for the first restore. Dependencies and logs stay under `work`; application outputs are under `ARM64\Release` and `ARM64\Debug`. ARM64 does not require the old x86/x64 NuGet packages.
+`Build-Arm64.ps1` fetches zlib 1.3.2 at verified commit `da607da739fa6047df13e66a2af6b8bec7c2a498`, builds it with CMake/Ninja and the matching dynamic CRT, and builds `CP_Main_10.sln`. Git checkouts need network access for the first restore. Our complete source ZIP instead includes `source-dependencies/zlib` with a file-hash manifest; the script verifies and uses those sources without downloading zlib. GitHub's automatic source archives do not include this external dependency. Dependencies and logs stay under `work`; application outputs are under `ARM64\Release` and `ARM64\Debug`. ARM64 does not require the old x86/x64 NuGet packages.
 
 On an ARM64 laptop the script selects native ARM64 MSBuild and compiler tools. On an x64 host it cross-compiles to ARM64. `-CompilerHost x64` explicitly selects the x64 compiler host; `-Rebuild` requests a clean solution rebuild. A 32-bit MSBuild/compiler host can fail loading this project's MFC precompiled header and is rejected by the main project.
 

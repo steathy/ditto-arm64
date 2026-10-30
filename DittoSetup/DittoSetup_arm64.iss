@@ -5,21 +5,24 @@
 #ifndef BuildLabel
   #define BuildLabel "local"
 #endif
+#ifndef BuildType
+  #define BuildType "Nightly"
+#endif
 #define MyAppName "Ditto"
 #define MyAppVersion GetFileVersion(PackagePath + "\Ditto.exe")
-#define DevVersion MyAppVersion + "-arm64-dev-" + BuildLabel
+#define PackageVersion MyAppVersion + "-arm64-" + BuildLabel
 
 [Setup]
 ; The x64 installer implicitly uses AppName as AppId. Keep the same identity.
 AppId=Ditto
 AppName={#MyAppName}
-AppVersion={#DevVersion}
-AppVerName=Ditto {#MyAppVersion} (ARM64 development)
+AppVersion={#MyAppVersion}
+AppVerName=Ditto {#MyAppVersion} (ARM64 {#BuildType} Build)
 AppPublisher=steathy (unofficial ARM64 build)
 AppPublisherURL=https://github.com/steathy/ditto-arm64
 AppSupportURL=https://github.com/steathy/ditto-arm64/issues
 AppUpdatesURL=https://github.com/steathy/ditto-arm64/releases
-OutputBaseFilename=DittoSetup_{#DevVersion}
+OutputBaseFilename=DittoSetup_{#PackageVersion}
 ArchitecturesAllowed=arm64
 ArchitecturesInstallIn64BitMode=arm64
 DefaultDirName={autopf}\Ditto
@@ -30,9 +33,9 @@ UsePreviousTasks=yes
 DisableProgramGroupPage=yes
 DirExistsWarning=no
 UninstallLogMode=overwrite
-UninstallDisplayName=Ditto (ARM64 development)
+UninstallDisplayName=Ditto (Windows ARM64)
 UninstallDisplayIcon={app}\Ditto.exe
-VersionInfoDescription=Ditto ARM64 development installer
+VersionInfoDescription=Ditto ARM64 {#BuildType} installer
 VersionInfoVersion={#MyAppVersion}
 VersionInfoProductName=Ditto ARM64
 VersionInfoProductVersion={#MyAppVersion}

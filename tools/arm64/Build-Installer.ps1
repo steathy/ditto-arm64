@@ -16,6 +16,8 @@ if (!$IsccPath) {
 }
 if (!$IsccPath) { throw 'Install Inno Setup 6.7 or newer, or provide -IsccPath.' }
 $manifest = Get-Content -LiteralPath (Join-Path $PackagePath 'build-info.json') -Raw | ConvertFrom-Json
+if ($manifest.channel -notin @('stable','beta')) { throw 'Package must declare its stable/beta channel.' }
+$buildType = if ($manifest.channel -eq 'stable') { 'Stable' } else { 'Nightly' }
 $required = @('Ditto.exe','DittoUpdate.exe','ICU_Loader.dll','Addins\DittoUtil.dll','mfc140u.dll','msvcp140.dll','vcruntime140.dll')
 foreach ($relative in $required) {
     $record = @($manifest.modules | Where-Object file -eq $relative)
@@ -39,7 +41,7 @@ $compileLog = Join-Path $OutputDirectory 'compile.log'
 $savedErrorPreference = $ErrorActionPreference
 try {
     $ErrorActionPreference = 'Continue'
-    & $IsccPath "/DPackagePath=$PackagePath" "/DBuildLabel=$label" "/O$OutputDirectory" (Join-Path $repoRoot 'DittoSetup\DittoSetup_ARM64.iss') *> $compileLog
+    & $IsccPath "/DPackagePath=$PackagePath" "/DBuildLabel=$label" "/DBuildType=$buildType" "/O$OutputDirectory" (Join-Path $repoRoot 'DittoSetup\DittoSetup_ARM64.iss') *> $compileLog
     $compileExitCode = $LASTEXITCODE
 } finally { $ErrorActionPreference = $savedErrorPreference }
 if ($compileExitCode) { throw "Inno Setup compilation failed. See $compileLog" }

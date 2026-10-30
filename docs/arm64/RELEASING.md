@@ -11,7 +11,8 @@ commit IDs. No personal machine, clipboard database or signing secret is needed.
 - Pushes to `main` or `codex/**`, pull requests, and manual Actions runs build/test
   and upload downloadable artifacts, retained for 30 days. Diagnostics last 7 days.
 - A pushed `vMAJOR.MINOR.BUILD.REVISION` tag additionally publishes a GitHub Release.
-  Its commit must already be on `main`, and the tag must exactly match both numeric
+  Its commit must already be on the `releaseBranch` declared in
+  `build/source-info.json`, and the tag must exactly match both numeric
   and string versions in `src/Arm64BuildInfo.h`. Release notes must exist at
   `docs/releases/MAJOR.MINOR.BUILD.REVISION.md` (at most 8 KiB UTF-8).
 - `DITTO_ARM64_NIGHTLY_BUILD=1` publishes a prerelease and updates only `beta`.
@@ -22,15 +23,18 @@ commit IDs. No personal machine, clipboard database or signing secret is needed.
 
 All builds run the native updater checks and isolated portable startup/database/ICU
 smoke test before packaging. The payload's seven EXE/DLL files must be ARM64.
-The release contains the installer, portable ZIP, corresponding project and zlib
-source archives, build manifests, update entry, release notes and `SHA256SUMS`.
+The release has exactly three uploaded files: the installer, portable ZIP and one
+source ZIP containing both the project and pinned zlib sources. SHA-256 checksums
+are displayed in the release notes. GitHub additionally generates its two
+repository-only source links. Build manifests, feed metadata, the release body
+and `SHA256SUMS` stay under `metadata/` in the Actions artifact.
 The installer bootstrapper may use Windows emulation; installed payloads are native.
 
 ## Publish a new version
 
 1. Increase both version definitions in `src/Arm64BuildInfo.h`, set the correct
    nightly/stable flag, update the README version and write that version's notes.
-2. Commit, review and push `main`. Verify its Actions run and test the built package
+2. Commit, review and push the channel's source branch. Verify its Actions run and test the built package
    on Windows ARM64. The full interactive update/install flow remains a manual test.
 3. Create and push the matching annotated tag to the `github` remote. For example,
    with an appropriately prepared version `3.25.146.9`:
@@ -48,6 +52,13 @@ The installer bootstrapper may use Windows emulation; installed payloads are nat
    beta releases are not.
 5. Fetch GitHub and fast-forward local `main` to include the bot's feed commit before
    starting the next change. Push that history to Gitea to keep the review copy current.
+
+The nightly branch is `main`, pinned to upstream `build-number-146`. The stable
+branch is `codex/stable-3.25.113`, based on official release `3.25.113.0` at
+`81a667c790f5a6c9b6b63f187eb75e79bf159670`. Stable must contain that upstream
+source baseline with the ARM64 port changes; changing only the version flag is
+insufficient. The central feed remains on `main` and receives both channels.
+An installed 3.25.146.x nightly will not auto-downgrade to a 3.25.113.x stable.
 
 The release job alone receives `contents: write`; builds and pull requests are
 read-only and do not retain Git credentials. GitHub's automatic `GITHUB_TOKEN`

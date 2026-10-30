@@ -36,7 +36,9 @@ foreach ($folder in @('Language','Themes')) {
 }
 Copy-Item -LiteralPath (Join-Path $repoRoot 'DittoSetup\portable') -Destination (Join-Path $OutputDirectory 'portable')
 Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSE') -Destination $OutputDirectory
-Copy-Item -LiteralPath (Join-Path $repoRoot 'work\dependencies\zlib\LICENSE') -Destination (Join-Path $OutputDirectory 'zlib-LICENSE.txt')
+$zlibLicense = Join-Path $repoRoot 'source-dependencies\zlib\LICENSE'
+if (!(Test-Path -LiteralPath $zlibLicense)) { $zlibLicense = Join-Path $repoRoot 'work\dependencies\zlib\LICENSE' }
+Copy-Item -LiteralPath $zlibLicense -Destination (Join-Path $OutputDirectory 'zlib-LICENSE.txt')
 $moduleRecords = foreach ($file in Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Where-Object Extension -in '.exe','.dll') {
     $stream = [IO.File]::OpenRead($file.FullName)
     $reader = [IO.BinaryReader]::new($stream)
@@ -58,18 +60,23 @@ $moduleRecords = foreach ($file in Get-ChildItem -LiteralPath $OutputDirectory -
     } finally { $reader.Dispose() }
 }
 $sourceInfo = Get-Content -LiteralPath (Join-Path $repoRoot 'build\source-info.json') -Raw | ConvertFrom-Json
+$releaseMetadata = & (Join-Path $PSScriptRoot 'Get-ReleaseMetadata.ps1')
 # An initial source import can be built for review before its first commit.
 $sourceCommit = & git -C $repoRoot rev-parse --verify --quiet HEAD
 if ($LASTEXITCODE) { $sourceCommit = $null }
 $sourceChanges = @(& git -C $repoRoot status --porcelain --untracked-files=normal)
 $manifest = [ordered]@{createdAt=(Get-Date).ToString('o');target='Windows ARM64';configuration='Release';version=(Get-Item -LiteralPath (Join-Path $releasePath 'Ditto.exe')).VersionInfo.ProductVersion;maintainer=$sourceInfo.maintainer;repository=$sourceInfo.repository;upstreamRepository=$sourceInfo.upstreamRepository;upstreamCommit=$sourceInfo.upstreamCommit;sourceCommit=$sourceCommit;sourceChanges=$sourceChanges;zlibCommit='da607da739fa6047df13e66a2af6b8bec7c2a498';redistVersion=$redistVersion;modules=@($moduleRecords)}
+$manifest.channel = $releaseMetadata.channel
+$manifest.upstreamVersion = $releaseMetadata.upstreamVersion
+$manifest.upstreamTag = $releaseMetadata.upstreamTag
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'build-info.json') -Encoding utf8
 @'
-Ditto native Windows ARM64 development build
+Ditto native Windows ARM64 community build
 
 Extract the entire folder and run Ditto.exe on Windows 11 on Arm.
 The portable marker keeps this build's settings and database beside the executable.
-This is an unsigned development build, not an official Ditto release.
+This is an unsigned community build, not an official Ditto release.
+See build-info.json for the version, stable/beta channel and upstream baseline.
 Avoid running two clipboard managers with the same global hotkey during normal use.
 Built by steathy@github. See docs/arm64/STATUS.md in the source checkout for port status.
 '@ | Set-Content -LiteralPath (Join-Path $OutputDirectory 'ARM64-README.txt') -Encoding utf8

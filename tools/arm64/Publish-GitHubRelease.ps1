@@ -10,10 +10,13 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:GITHUB_REPOSITORY -ne 'steathy/ditto
 }
 $metadata = & "$PSScriptRoot/Get-ReleaseMetadata.ps1" -Tag $Tag
 $AssetPath = (Resolve-Path -LiteralPath $AssetPath).Path
-$info = Get-Content "$AssetPath/release-info.json" -Raw | ConvertFrom-Json
-$entry = Get-Content "$AssetPath/update-entry.json" -Raw | ConvertFrom-Json
+$metadataPath = Join-Path $AssetPath 'metadata'
+$info = Get-Content "$metadataPath/release-info.json" -Raw | ConvertFrom-Json
+$entry = Get-Content "$metadataPath/update-entry.json" -Raw | ConvertFrom-Json
 if ($info.tag -cne $Tag -or $info.version -ne $metadata.version -or $info.channel -ne $metadata.channel -or
-    $info.sourceCommit -ne $env:GITHUB_SHA -or $entry.version -ne $metadata.version -or $info.signed) { throw 'Release metadata mismatch.' }
+    $info.sourceCommit -ne $env:GITHUB_SHA -or $entry.version -ne $metadata.version -or $info.signed -or
+    $info.upstreamCommit -ne $metadata.upstreamCommit -or $info.releaseBranch -ne $metadata.releaseBranch) { throw 'Release metadata mismatch.' }
+$publicNames = @("DittoSetup_$($info.version)_arm64.exe", "DittoPortable_$($info.version)_arm64.zip", "DittoSource_$($info.version).zip")
 $repository = $env:GITHUB_REPOSITORY
 function Invoke-Gh([string[]]$Arguments) {
     $result = & gh @Arguments
@@ -22,17 +25,16 @@ function Invoke-Gh([string[]]$Arguments) {
 }
 function Test-Checksums([string]$Directory) {
     $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    foreach ($line in Get-Content "$AssetPath/SHA256SUMS") {
+    foreach ($line in Get-Content "$metadataPath/SHA256SUMS") {
         if ($line -notmatch '^([0-9a-f]{64})  ([A-Za-z0-9_.-]+)$') { throw 'Malformed checksum record.' }
         $hash = $Matches[1]; $name = $Matches[2]
-        if (!$names.Add($name)) { throw 'Duplicate checksum record.' }
+        if (!$names.Add($name) -or $name -notin $publicNames) { throw 'Unexpected or duplicate checksum record.' }
         if ((Get-FileHash -LiteralPath (Join-Path $Directory $name)).Hash -ne $hash) { throw "Checksum mismatch: $name" }
     }
-    if ($names.Count -lt 8 -or !$names.Contains('release-info.json') -or !$names.Contains('update-entry.json')) { throw 'Incomplete release manifest.' }
+    if ($names.Count -ne 3) { throw 'Exactly three public release assets are required.' }
     foreach ($file in Get-ChildItem -LiteralPath $Directory -File) {
-        if ($file.Name -ne 'SHA256SUMS' -and !$names.Contains($file.Name)) { throw 'Unlisted release asset.' }
+        if (!$names.Contains($file.Name)) { throw 'Unlisted release asset.' }
     }
-    if ((Get-FileHash "$Directory/SHA256SUMS").Hash -ne (Get-FileHash "$AssetPath/SHA256SUMS").Hash) { throw 'Uploaded checksum manifest differs.' }
 }
 Test-Checksums $AssetPath
 $headers = @{Authorization="Bearer $env:GH_TOKEN";Accept='application/vnd.github+json';'X-GitHub-Api-Version'='2022-11-28'}
@@ -42,10 +44,10 @@ catch {
     if ([int]$_.Exception.Response.StatusCode -ne 404) { throw }
     $release = $null
 }
-$assets = @((Get-ChildItem -LiteralPath $AssetPath -File).FullName)
+$assets = @($publicNames | ForEach-Object { Join-Path $AssetPath $_ })
 if (!$release) {
     $arguments = @('release','create',$Tag,'--repo',$repository,'--verify-tag','--target',$info.sourceCommit,
-        '--draft','--latest=false','--title',"Ditto Windows ARM64 $($info.version)",'--notes-file',"$AssetPath/release-notes.md")
+        '--draft','--latest=false','--title',"Ditto Windows ARM64 $($info.version)",'--notes-file',"$metadataPath/release-body.md")
     if ($info.channel -eq 'beta') { $arguments += '--prerelease' }
     Invoke-Gh ($arguments + $assets)
 } elseif ($release.draft) {

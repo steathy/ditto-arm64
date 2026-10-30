@@ -34,6 +34,18 @@ function Invoke-Logged([string]$Program, [string[]]$Arguments, [string]$LogPath)
 }
 $sourcePath = Join-Path $workPath 'dependencies\zlib'
 $expectedCommit = 'da607da739fa6047df13e66a2af6b8bec7c2a498'
+$bundledPath = Join-Path $repoRoot 'source-dependencies\zlib'
+if (Test-Path -LiteralPath $bundledPath) {
+    $sourcePath = $bundledPath
+    $manifest = Get-Content (Join-Path $sourcePath '.ditto-source.json') -Raw | ConvertFrom-Json
+    if ($manifest.commit -ne $expectedCommit) { throw 'Bundled zlib source has an unexpected revision.' }
+    $files = @(Get-ChildItem -LiteralPath $sourcePath -Recurse -File -Force | Where-Object Name -ne '.ditto-source.json')
+    if ($files.Count -ne @($manifest.files.PSObject.Properties).Count) { throw 'Bundled zlib source file count changed.' }
+    foreach ($file in $files) {
+        $relative = $file.FullName.Substring($sourcePath.Length + 1).Replace('\','/')
+        if ((Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash -ne $manifest.files.$relative) { throw "Bundled zlib source changed: $relative" }
+    }
+} else {
 if (!(Test-Path -LiteralPath $sourcePath)) {
     Invoke-Logged 'git' @('clone','--depth','1','--branch','v1.3.2','https://github.com/madler/zlib.git',$sourcePath) (Join-Path $workPath 'zlib-checkout.log')
 }
@@ -41,6 +53,7 @@ $actualCommit = & git -C $sourcePath rev-parse HEAD
 if ($LASTEXITCODE -or $actualCommit -ne $expectedCommit) { throw "Unexpected zlib revision: $actualCommit; expected $expectedCommit" }
 $dirtySource = & git -C $sourcePath status --porcelain --untracked-files=no
 if ($LASTEXITCODE -or $dirtySource) { throw 'The pinned zlib checkout has changes; restore a clean source checkout before building.' }
+}
 $buildPath = Join-Path $workPath "dependencies\build\arm64\$Configuration"
 $installPath = Join-Path $workPath "dependencies\installed\arm64\$Configuration"
 $cmakeRoot = Join-Path $VisualStudioPath 'Common7\IDE\CommonExtensions\Microsoft\CMake'
