@@ -12,6 +12,9 @@
 **/Win32/
 **/Release*/
 **/Debug*/
+# Release notes are source, not build output.
+!/docs/releases/
+!/docs/releases/**
 # Upstream keeps source-controlled translations and themes under Debug.
 !/Debug/
 /Debug/*

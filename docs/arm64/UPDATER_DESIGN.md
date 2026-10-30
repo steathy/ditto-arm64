@@ -1,8 +1,9 @@
 # ARM64 update mechanism
 
 Implemented in revision **3.25.146.4**, with stable/beta support in **3.25.146.5**.
-Signing and publication are still
-pending; build scripts do not publish anything.
+Signing is still pending. The [GitHub release workflow](RELEASING.md) builds/tests
+version tags, publishes verified unsigned assets and updates the matching channel.
+The local build/packaging scripts do not publish anything.
 
 ## User experience
 
@@ -61,11 +62,11 @@ client where possible. Setup displays progress and never reboots automatically.
 Compiled endpoint:
 `https://raw.githubusercontent.com/steathy/ditto-arm64/main/updates/arm64.json`
 
-The checked-in [feed](../../updates/arm64.json) has `channels.stable: null` and
-`channels.beta: null`, meaning neither channel has a published offer. Each key
-accepts exactly one release object, not a list. Replace that channel's entry when
+The checked-in [feed](../../updates/arm64.json) starts with both channel entries
+set to `null`. The release workflow fills a channel after verifying its public
+installer. Each key accepts exactly one release object, not a list. Replace that channel's entry when
 publishing its newest release; keep the other channel's entry. Old release assets
-may remain available for recovery. The remote file is not yet published. HTTP errors and timeouts are
+may remain available for recovery. HTTP errors and timeouts are
 reported as errors, never as "up to date".
 
 Complete illustrative future feed (replace the placeholder hash and size):
@@ -213,8 +214,8 @@ these are not successful production signature tests.
 
 `-LiveFeed` exercises the actual WinHTTP endpoint. On October 29, 2026 it timed out
 with Windows error 12002 on the previous stable-only endpoint; the expanded local
-suite passed. The new endpoint has not been published. Public feed availability and
-a real automatic installation remain release prerequisites; signed publication also
+suite passed. The release workflow checks public asset availability before updating
+the new feed. A real automatic installation still needs validation; signed publication also
 requires signing setup. UI, package
 and local test-installation results are recorded in the repository review.
 

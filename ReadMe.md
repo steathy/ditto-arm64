@@ -13,7 +13,7 @@ plus subsequent `master` changes, pinned to commit
 
 **Current ARM64 build:** `3.25.146.8` — **Nightly Build**
 (upstream nightly build 146, ARM64 revision 8).
-Project and future updates: [steathy/ditto-arm64](https://github.com/steathy/ditto-arm64).
+Project and updates: [steathy/ditto-arm64](https://github.com/steathy/ditto-arm64).
 
 Ditto saves clipboard history so you can search and reuse copied text, images,
 HTML and other clipboard formats. This port targets Windows 11 on Arm.
@@ -24,6 +24,7 @@ release. See the [original project](https://github.com/sabrogden/Ditto) and its
 [wiki](https://github.com/sabrogden/Ditto/wiki) for features, usage and documentation.
 
 - [Build instructions](tools/arm64/README.md)
+- [Downloads](https://github.com/steathy/ditto-arm64/releases) and [automated releases](docs/arm64/RELEASING.md)
 - [Port status](docs/arm64/STATUS.md)
 - [Update mechanism and release setup](docs/arm64/UPDATER_DESIGN.md)
 - [Upstream provenance and credits](UPSTREAM.md)
@@ -44,9 +45,9 @@ The port retains Ditto's existing clipboard capture, history, search and paste
 features; it does not intentionally redesign their core behavior. Compatibility
 fixes and packaging changes are documented in the port status above.
 
-Current local builds are unsigned. Both feed entries are empty until releases are
-published. Users can choose to install unsigned updates after a warning; signed
-releases must match the fork's approved publisher identity. Signing and public
-releases are pending.
+Current builds are unsigned. Tagged builds are tested and published by GitHub
+Actions; nightly builds are prereleases in the beta update channel. Users can
+choose to install unsigned updates after a warning; signed releases must match
+the fork's approved publisher identity. Signing is not yet configured.
 Licensed under [GNU GPLv3](LICENSE), following upstream; third-party components
 retain their original licenses.
