@@ -2,7 +2,7 @@ name: Windows ARM64 build and release
 
 on:
   push:
-    branches: [main, 'codex/**']
+    branches: [main, nightly, 'codex/**']
     tags: ['v*']
     paths-ignore: ['updates/arm64.json']
   pull_request:
@@ -33,9 +33,16 @@ jobs:
         id: metadata
         env:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          TARGET_BRANCH: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
         run: |
           $metadata = & ./tools/arm64/Get-ReleaseMetadata.ps1 -Tag $env:RELEASE_TAG
           "version=$($metadata.version)" >> $env:GITHUB_OUTPUT
+          if ($env:TARGET_BRANCH -in @('main', 'nightly')) {
+            $expectedChannel = if ($env:TARGET_BRANCH -eq 'main') { 'stable' } else { 'beta' }
+            if ($metadata.releaseBranch -ne $env:TARGET_BRANCH -or $metadata.channel -ne $expectedChannel) {
+              throw 'main must build stable; nightly must build beta, with matching releaseBranch metadata.'
+            }
+          }
           if ($env:RELEASE_TAG) {
             git merge-base --is-ancestor HEAD "origin/$($metadata.releaseBranch)"
             if ($LASTEXITCODE) { throw 'Release tag must point to a commit on its declared release branch.' }

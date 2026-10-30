@@ -40,5 +40,4 @@ public:
 	afx_msg void OnNcLButtonDown(UINT nHitTest, CPoint point);
 	virtual BOOL PreTranslateMessage(MSG* pMsg);
 	afx_msg void OnBnClickedButtonNextMatch();
-	afx_msg void OnBnClickedButtonCopyScripts2();
 };

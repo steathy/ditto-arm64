@@ -6,13 +6,12 @@ maintained and built by [steathy](https://github.com/steathy) (`steathy@github`)
 This community build is specifically for **Windows ARM64**. It is not affiliated
 with or endorsed by the original Ditto project or its maintainers.
 
-**Upstream version:** [Ditto 3.25.113.0](https://github.com/sabrogden/Ditto/releases/tag/3.25.113.0)
-plus subsequent `master` changes, pinned to commit
-[`a80fd35`](https://github.com/sabrogden/Ditto/commit/a80fd3536bc407cac8cce43b5682022282ace983)
-(September 30, 2026; upstream tag `build-number-146`).
+**Upstream version:** [Ditto 3.25.113.0](https://github.com/sabrogden/Ditto/releases/tag/3.25.113.0),
+the official stable release, pinned to commit
+[`81a667c`](https://github.com/sabrogden/Ditto/commit/81a667c790f5a6c9b6b63f187eb75e79bf159670).
 
-**This branch's ARM64 build:** `3.25.146.9` — **Nightly Build**
-(upstream nightly build 146, ARM64 revision 9).
+**This branch's ARM64 build:** `3.25.113.1` — **Stable Build**
+(upstream stable 3.25.113.0, ARM64 revision 1).
 Project and updates: [steathy/ditto-arm64](https://github.com/steathy/ditto-arm64).
 
 | Download | ARM64 version | Upstream baseline |
@@ -22,8 +21,9 @@ Project and updates: [steathy/ditto-arm64](https://github.com/steathy/ditto-arm6
 
 Each release has an installer, portable ZIP and source ZIP including zlib.
 Checksums are in the release notes. GitHub also adds repository-only source archives.
-Stable source is maintained on [codex/stable-3.25.113](https://github.com/steathy/ditto-arm64/tree/codex/stable-3.25.113);
-`main` retains the nightly baseline. Switching from a numerically newer nightly to
+Stable source is maintained on [main](https://github.com/steathy/ditto-arm64/tree/main);
+[nightly](https://github.com/steathy/ditto-arm64/tree/nightly) tracks upstream development.
+Switching from a numerically newer nightly to
 stable requires a deliberate manual installation; the updater never downgrades.
 
 Ditto saves clipboard history so you can search and reuse copied text, images,
@@ -37,6 +37,7 @@ release. See the [original project](https://github.com/sabrogden/Ditto) and its
 - [Build instructions](tools/arm64/README.md)
 - [Downloads](https://github.com/steathy/ditto-arm64/releases) and [automated releases](docs/arm64/RELEASING.md)
 - [Port status](docs/arm64/STATUS.md)
+- [Stable source baseline](docs/arm64/STABLE_BASELINE.md)
 - [Update mechanism and release setup](docs/arm64/UPDATER_DESIGN.md)
 - [Upstream provenance and credits](UPSTREAM.md)
 

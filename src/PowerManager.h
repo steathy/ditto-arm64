@@ -26,10 +26,9 @@ public:
 	~CPowerManager(void);
 
 	void Start(HWND hWnd);
-	void Close();
+	void CPowerManager::Close();
 
 protected:
 	HPOWERNOTIFY m_registrationHandle;
-	HMODULE m_hPowrProf;
 };
 
