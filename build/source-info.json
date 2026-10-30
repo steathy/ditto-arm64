@@ -3,8 +3,8 @@
   "maintainer": "steathy@github",
   "repository": "https://github.com/steathy/ditto-arm64",
   "upstreamRepository": "https://github.com/sabrogden/Ditto",
-  "upstreamCommit": "a80fd3536bc407cac8cce43b5682022282ace983",
-  "upstreamVersion": "3.25.146.0",
-  "upstreamTag": "build-number-146",
-  "releaseBranch": "main"
+  "upstreamCommit": "81a667c790f5a6c9b6b63f187eb75e79bf159670",
+  "upstreamVersion": "3.25.113.0",
+  "upstreamTag": "3.25.113.0",
+  "releaseBranch": "codex/stable-3.25.113"
 }

@@ -1,84 +1,71 @@
 # ARM64 port status
 
-This is an unsigned development port for Windows 11 on Arm, maintained by
+This is an unsigned community port for Windows 11 on Arm, maintained by
 [steathy](https://github.com/steathy). It is not an official Ditto release.
 
-## Version and updates
+## Source and release channels
 
-The current community build version is **3.25.146.8 — Nightly Build**: upstream CI build tag
-`build-number-146`, followed by ARM64 port revision 8. It is declared in
-`src/Arm64BuildInfo.h` and used by the executable resource and installer.
-The upstream source snapshot is still `a80fd35`, after official release 3.25.113.0.
-The initial local test build displayed 3.24.238.2 because the upstream checked-in
-resource had that old value; upstream CI normally replaces it during packaging.
+| Channel | ARM64 version | Upstream source | Branch |
+|---|---|---|---|
+| Stable | 3.25.113.1 | Official stable 3.25.113.0, `81a667c` | `codex/stable-3.25.113` |
+| Beta / nightly | 3.25.146.9 | `build-number-146`, `a80fd35` | `main` |
 
-About's **Check Update** button now checks this fork's stable/beta JSON feed in the
-background, displays release notes/progress, downloads newer compatible installers,
-and verifies size, SHA-256, product/version metadata and signature status.
-Signed files require valid Authenticode trust and an approved publisher identity.
-Unsigned updates require **Install unsigned update / Cancel**, with Cancel as the
-default, before Windows UAC. A native
-helper coordinates backup, shutdown, installation and restart. Checks occur only
-on a button click; the old upstream `CheckForUpdates` setting remains unused.
-The feed contains exactly one latest release slot per channel. Stable-only is the
-default; **Include beta updates (Nightly Builds)** selects the newer offer across
-both channels, preferring stable on equal versions. Channel preferences are saved
-immediately. Switching preferences clears any pending installation offer, requires
-a fresh check, and never downgrades an installed build. The installed build's label
-comes from its compiled build type, independently of update preferences.
+This branch builds the **stable** version. The stable branch restores the upstream
+stable application and bundled library sources while retaining the ARM64 port and
+fork updater. Version, channel and upstream provenance are declared in
+`src/Arm64BuildInfo.h` and `build/source-info.json`.
+The initial local test displayed 3.24.238.2 because upstream's checked-in version
+resource was stale; the port now supplies its own consistent binary/installer version.
 
-About links to the fork repository and the original repository directly beneath it,
-displays `steathy@github` as the ARM64 builder,
-and preserves the original author credits. Installer publisher, support and update
-links also point to the fork. General usage/help links still lead to upstream's wiki.
-Revision 7 restores the information list's original 132-dialog-unit height. Both
-repository names and addresses are clickable, aligned in measured columns. Update
-messages flow below the list, with no empty initial instruction/status row. Signing
-information is in the Install button tooltip and confirmation dialog, not the page body.
-Revision 8 also accepts Inno Setup's trailing-space padding in product-name resources
-while preserving the exact expected product identity after that padding is removed.
+## ARM64 and fork changes
 
-The [updater guide](UPDATER_DESIGN.md) describes the implementation and release setup.
-Both feed entries are empty and the compiled publisher-key list is intentionally empty.
-Unsigned local releases can be installed after explicit per-install consent;
-unsigned consent does not override invalid signatures or hash/identity mismatches.
-Publishing a real feed/release and testing an automatic upgrade through the live
-endpoint are still outstanding. The live feed request previously timed out on this
-laptop. The expanded updater fixtures cover unsigned PE downloads and consent gates.
-The Options dialog omits the unused Apply button before layout, keeping OK and
-Cancel aligned to the right without an empty button slot.
+- MSVC v145 ARM64 build configuration and corrected output, library and header paths.
+- Pinned zlib 1.3.2 built from source; source releases also bundle that dependency.
+- Native Ditto, update helper, ICU_Loader, DittoUtil and three Microsoft runtime DLLs.
+- An Inno Setup installer with settings/history preservation and backup support.
+- Corrected English language fallback and ARM64/version identification.
+- About-page builder credits and aligned links to both repositories, original-size
+  information list, compact update controls, and right-aligned OK/Cancel buttons.
+- Compiler path trimming and package checks for personal directory disclosures.
 
-## Changes
+The port retains the chosen upstream baseline's clipboard, search and paste behavior.
+See [upstream provenance](../../UPSTREAM.md) for credits and licensing.
 
-- Use MSVC v145 for ARM64 projects and a 64-bit compiler/MSBuild host.
-- Correct ARM64 output paths, precompiled-header settings and static-library target.
-- Build pinned zlib 1.3.2 from source and use its matching headers and library.
-- Package Ditto, its update helper, ICU_Loader, DittoUtil and three ARM64 runtime DLLs.
-- Produce an Inno Setup installer that preserves existing user preferences and
-  databases during an in-place installation.
-- Correct the first-run English language fallback and identify ARM64 builds in About.
-- Remove developer-specific directory paths from compiled file diagnostics and PE
-  debug records, and reject packages that retain Windows user-directory paths.
+## Updates and publication
 
-## Verification
+About's **Check Update** reads this fork's JSON feed on request, shows release notes
+and progress, downloads compatible newer installers, and verifies size, SHA-256,
+product/version metadata and signature status. Stable is the default; **Include beta
+updates (Nightly Builds)** opts into the newest offer across both channels. The
+updater never downgrades: switching from 3.25.146.x nightly to 3.25.113.x stable
+requires a deliberate manual installation. Back up settings/history before switching
+to an older upstream baseline; compatibility with an existing nightly database is
+not established by the isolated fresh-database test.
 
-Release and Debug builds, native execution, bundled module loading, isolated
-database creation, SQLite integrity, and ICU regex/Unicode operations were tested
-during port development. A prior local installation also verified preservation of
-existing preferences and history. Per-machine logs, paths, registry exports,
-database backups and history counts are intentionally excluded from this repository.
+Unsigned updates require explicit **Install unsigned update / Cancel** consent,
+defaulting to Cancel, before Windows UAC. Signed updates require valid Authenticode
+trust and an approved publisher key. Signing and approved keys are not configured.
+The helper coordinates backup, graceful shutdown, installation and restart.
 
-See [the build guide](../../tools/arm64/README.md) for repeatable commands. Further
-clipboard/paste, preview, networking, clean-machine install/uninstall, and performance
-testing is still needed. Signing and automated publication are not configured.
+GitHub Actions builds, tests and publishes tagged releases, with exactly three
+uploaded files: installer, portable ZIP and complete source ZIP. Internal build
+metadata stays in Actions artifacts; checksums appear in the release notes.
+GitHub adds two automatic repository source archives. The central
+`main/updates/arm64.json` contains one latest entry per channel.
+See [release automation](RELEASING.md) and [updater design](UPDATER_DESIGN.md).
 
-The cleaned source snapshot was rebuilt and packaged on October 29, 2026. Its source
-hygiene check, binary path checks, installer compilation and isolated runtime/database
-tests passed. See [the repository review](REPOSITORY_REVIEW.md) for scope and results.
+## Verification and remaining work
 
-## Publication boundaries
+Each release workflow runs native updater fixtures, ARM64 payload checks, isolated
+portable startup, SQLite integrity and ICU regex/Unicode checks, installer compilation,
+source hygiene checks and downloaded release-asset verification. Per-machine logs,
+registry exports, databases and history backups remain outside Git.
 
-The application and installer are development builds and are unsigned. Do not reuse
-upstream signing credentials or claim SignPath approval before this fork is accepted.
-Only source and build instructions belong in Git. Generated binaries belong in
-release assets, and private settings/history/backups remain local.
+A prior local nightly installation verified preservation of the user's preferences
+and history. A full interactive upgrade through the public feed, stable-over-nightly
+database compatibility, clean-machine install/uninstall, broader clipboard/paste
+regression testing and performance measurements still need manual validation.
+Release checks do not substitute for those tests. Signing remains separate work.
+
+Only source, documentation and build scripts belong in Git. Generated binaries are
+release assets. Do not reuse upstream signing credentials or imply signing approval.

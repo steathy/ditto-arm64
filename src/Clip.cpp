@@ -360,22 +360,12 @@ int CClip::LoadFromClipboard(CClipTypes* pClipTypes, bool checkClipboardIgnore, 
 
 	// m_Formats should be empty when this is called.
 	ASSERT(m_Formats.GetSize() == 0);
-
+	
 	// If the data is supposed to be private, then return
-	if (::IsClipboardFormatAvailable(theApp.m_cfIgnoreClipboard))
+	if(::IsClipboardFormatAvailable(theApp.m_cfIgnoreClipboard))
 	{
 		Log(_T("Clipboard ignore type is on the clipboard, skipping this clipboard change"));
 		return FALSE;
-	}
-	
-	if (CGetSetOptions::m_enforceClipboardIgnoreFormats)
-	{
-		//https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-formats
-		if (::IsClipboardFormatAvailable(theApp.m_excludeClipboardContentFromMonitorProcessing))
-		{
-			Log(_T("ExcludeClipboardContentFromMonitorProcessing type is on the clipboard, skipping this clipboard change"));
-			return FALSE;
-		}
 	}
 
 	//If we are saving a multi paste then delay us connecting to the clipboard
@@ -385,7 +375,7 @@ int CClip::LoadFromClipboard(CClipTypes* pClipTypes, bool checkClipboardIgnore, 
 		Log(_T("Delay clipboard type is on the clipboard, delaying 1500 ms to allow ctrl-v to work"));
 		Sleep(1500);
 	}
-
+		
 	//Attach to the clipboard
 	if(!oleData.AttachClipboard())
 	{
@@ -395,37 +385,8 @@ int CClip::LoadFromClipboard(CClipTypes* pClipTypes, bool checkClipboardIgnore, 
 	}
 	
 	oleData.EnsureClipboardObject();
-
-	//https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-formats
-	if (CGetSetOptions::m_enforceClipboardIgnoreFormats &&
-		oleData.IsDataAvailable(theApp.m_canIncludeInClipboardHistory))
-	{
-		HGLOBAL includeInHistory = oleData.GetGlobalData(theApp.m_canIncludeInClipboardHistory);
-		if (includeInHistory != nullptr)
-		{
-			bool doReturn = false;
-
-			DWORD* data = static_cast<DWORD*>(GlobalLock(includeInHistory));
-			if (data != nullptr)
-			{			
-				if(*data == 0)
-				{
-					Log(_T("CanIncludeInClipboardHistory is 0, skipping this clipboard change"));
-					doReturn = true;
-				}
-
-				GlobalUnlock(includeInHistory);				
-			}
-
-			GlobalFree(includeInHistory);
-			if (doReturn)
-			{
-				oleData.Release();
-				return FALSE;
-			}
-		}
-	}
-		
+	
+	
 	m_Desc = "[Ditto Error] BAD DESCRIPTION";
 	
 	// Get Description String
