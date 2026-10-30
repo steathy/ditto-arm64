@@ -1030,9 +1030,7 @@ FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     LISTBOX         IDC_LIST,7,7,323,132,LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP
     LTEXT           "Ditto Windows ARM64",IDC_ARM64_REPOSITORY_NAME,7,98,91,12
-    LTEXT           "- github.com/steathy/ditto-arm64",IDC_HYPER_LINK,104,98,226,12
     LTEXT           "Ditto Windows x86/64",IDC_UPSTREAM_REPOSITORY_NAME,7,114,91,12
-    LTEXT           "- github.com/sabrogden/Ditto",IDC_UPSTREAM_REPOSITORY,104,114,226,12
     LTEXT           "",IDC_UPDATE_STATUS,7,130,323,28
     CONTROL         "",IDC_UPDATE_PROGRESS,"msctls_progress32",WS_BORDER,7,162,323,6
     LTEXT           "Read full release notes",IDC_UPDATE_NOTES,7,172,323,12
