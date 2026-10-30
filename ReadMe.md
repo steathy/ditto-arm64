@@ -11,9 +11,20 @@ plus subsequent `master` changes, pinned to commit
 [`a80fd35`](https://github.com/sabrogden/Ditto/commit/a80fd3536bc407cac8cce43b5682022282ace983)
 (September 30, 2026; upstream tag `build-number-146`).
 
-**Current ARM64 build:** `3.25.146.8` — **Nightly Build**
-(upstream nightly build 146, ARM64 revision 8).
+**This branch's ARM64 build:** `3.25.146.9` — **Nightly Build**
+(upstream nightly build 146, ARM64 revision 9).
 Project and updates: [steathy/ditto-arm64](https://github.com/steathy/ditto-arm64).
+
+| Download | ARM64 version | Upstream baseline |
+|---|---|---|
+| [Stable](https://github.com/steathy/ditto-arm64/releases/tag/v3.25.113.1) | 3.25.113.1 | Official stable 3.25.113.0 |
+| [Nightly / beta](https://github.com/steathy/ditto-arm64/releases/tag/v3.25.146.9) | 3.25.146.9 | Nightly build-number-146 |
+
+Each release has an installer, portable ZIP and source ZIP including zlib.
+Checksums are in the release notes. GitHub also adds repository-only source archives.
+Stable source is maintained on [codex/stable-3.25.113](https://github.com/steathy/ditto-arm64/tree/codex/stable-3.25.113);
+`main` retains the nightly baseline. Switching from a numerically newer nightly to
+stable requires a deliberate manual installation; the updater never downgrades.
 
 Ditto saves clipboard history so you can search and reuse copied text, images,
 HTML and other clipboard formats. This port targets Windows 11 on Arm.

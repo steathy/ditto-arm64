@@ -2,6 +2,7 @@
 /work/
 /artifacts/
 /packages/
+/source-dependencies/
 /ARM64/
 /Addins/DittoUtil/ARM64/
 /EncryptDecrypt/ARM64/

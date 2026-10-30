@@ -37,8 +37,8 @@ jobs:
           $metadata = & ./tools/arm64/Get-ReleaseMetadata.ps1 -Tag $env:RELEASE_TAG
           "version=$($metadata.version)" >> $env:GITHUB_OUTPUT
           if ($env:RELEASE_TAG) {
-            git merge-base --is-ancestor HEAD origin/main
-            if ($LASTEXITCODE) { throw 'Release tags must point to a commit on main.' }
+            git merge-base --is-ancestor HEAD "origin/$($metadata.releaseBranch)"
+            if ($LASTEXITCODE) { throw 'Release tag must point to a commit on its declared release branch.' }
           }
       - name: Audit tracked source
         run: ./tools/arm64/Test-SourceHygiene.ps1
@@ -74,7 +74,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ditto-arm64-${{ steps.metadata.outputs.version }}
-          path: artifacts/release/*
+          path: artifacts/release/
           if-no-files-found: error
           retention-days: 30
       - name: Upload build and test diagnostics
