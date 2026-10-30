@@ -4,7 +4,18 @@
   "platform": "windows",
   "architecture": "arm64",
   "channels": {
-    "stable": null,
+    "stable": {
+      "version": "3.25.113.1",
+      "publishedAt": "2026-10-30T04:44:16Z",
+      "minimumWindowsBuild": 22000,
+      "releaseNotesUrl": "https://github.com/steathy/ditto-arm64/releases/tag/v3.25.113.1",
+      "releaseNotes": "# Ditto Windows ARM64 3.25.113.1 — Stable Build\n\nUnofficial community ARM64 port by [steathy](https://github.com/steathy), based on\nthe current official stable [Ditto 3.25.113.0](https://github.com/sabrogden/Ditto/releases/tag/3.25.113.0)\nat commit `81a667c790f5a6c9b6b63f187eb75e79bf159670`. The final `.1` is this\nfork's ARM64 revision. Ditto was created by Scott Brogden, Kevin Edwards and the\nupstream community; this fork is not affiliated with or endorsed by them.\n\n- Restores the stable application sources and bundled SQLite 3.45.2 / SQLite3\n  Multiple Ciphers 1.8.4, rather than relabeling a newer nightly build.\n- Retains native ARM64 support, pinned zlib 1.3.2, the fork's About page, and manual\n  stable/beta update checks with download, hash verification and installation consent.\n- Provides an installer, portable ZIP and complete source ZIP including zlib.\n  Internal build metadata remains in Actions artifacts; checksums are below.\n\nTargets Windows 11 on Arm. This build is unsigned; installation requires accepting\nthe relevant unsigned-publisher warning. Signed release support is not yet configured.\nNative updater checks, isolated startup/database/ICU tests and installer compilation\nrun in GitHub Actions before publication. Full interactive installation and broad\nclipboard/paste regression testing remain manual validation tasks.\n\nAn installed 3.25.146.x nightly is numerically newer and will not auto-downgrade to\nthis stable release. Switch manually if desired, after backing up settings and\nclipboard history. Fresh-database tests do not establish compatibility with every\nexisting nightly database. Keep a backup or test the portable version separately.",
+      "installer": {
+        "url": "https://github.com/steathy/ditto-arm64/releases/download/v3.25.113.1/DittoSetup_3.25.113.1_arm64.exe",
+        "sha256": "b12e030d03e2a2c58e546bcacfeb7670bce7686995b0114437da18e3581dd5d3",
+        "size": 7099760
+      }
+    },
     "beta": {
       "version": "3.25.146.9",
       "publishedAt": "2026-10-30T04:38:54Z",
