@@ -7,10 +7,10 @@ This is an unsigned community port for Windows 11 on Arm, maintained by
 
 | Channel | ARM64 version | Upstream source | Branch |
 |---|---|---|---|
-| Stable | 3.25.113.1 | Official stable 3.25.113.0, `81a667c` | `codex/stable-3.25.113` |
-| Beta / nightly | 3.25.146.9 | `build-number-146`, `a80fd35` | `main` |
+| Stable | 3.25.113.1 | Official stable 3.25.113.0, `81a667c` | `main` |
+| Beta / nightly | 3.25.146.9 | `build-number-146`, `a80fd35` | `nightly` |
 
-This branch builds the **nightly** version. The stable branch restores the upstream
+This branch builds the **stable** version. The stable branch restores the upstream
 stable application and bundled library sources while retaining the ARM64 port and
 fork updater. Version, channel and upstream provenance are declared in
 `src/Arm64BuildInfo.h` and `build/source-info.json`.

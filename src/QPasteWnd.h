@@ -20,7 +20,6 @@
 #include "SymbolEdit.h"
 #include "Popup.h"
 #include "CustomFriendsHelper.h"
-#include "ModernScrollBar.h"
 
 class CMainTable
 {
@@ -166,14 +165,11 @@ public:
 	CAccels m_toolTipActions;
 	CAccels m_modifierKeyActions;
 	bool m_showScrollBars;
-	CModernScrollBar m_modernScrollBar;       // Vertical scrollbar
-	CModernScrollBar m_modernScrollBarHorz;   // Horizontal scrollbar
 	int m_leftSelectedCompareId;
 	INT64 m_extraDataCounter;
 	CPopup m_popupMsg;
 	CCustomFriendsHelper m_customFriendsHelper;
 	bool m_noSearchResults;
-	bool m_bShowStarredClips;
 	CAccel m_timerAction;
 	__int64 m_lastDbWrite;
 	bool m_pendingRefresh;
@@ -201,7 +197,6 @@ public:
     void SetTransparency(int percent);
     void OnUpdateLinesPerRow(CCmdUI *pCmdUI, int nValue);
     void OnUpdateTransparency(CCmdUI *pCmdUI, int nValue);
-	void AddShowStarredClipsMenuItem(CMenu *pMenu);
     void SetMenuChecks(CMenu *pMenu);
     void SetSendToMenu(CMenu *pMenu, int nMenuID, int nArrayPos);
 	void SetFriendChecks(CMenu *pMenu);
@@ -274,8 +269,6 @@ public:
 	bool DoExportToTextFile();
 	bool DoExportToGoogleTranslate();
 	bool DoExportToWebSearch();
-	bool DoActionGenerateGuid();
-	bool DoPasteAsImage();
 	bool DoExportToBitMapFile();
 	bool DoSaveCurrentClipboard();
 	bool DoMoveClipDown();
@@ -310,18 +303,12 @@ public:
 	bool DoActionPasteDontMoveClip();
 	bool DoSetDragFileName();
 	bool DoActionPasteTrimWhiteSpace();
-	bool DoActionPastePosixifyPaths();
 	bool DoActionToggleTransparency();
 	bool DoActionIncreaseTransparency();
 	bool DoActionDecreaseTransparency();
 	bool DoActionEmailTo();
 	bool DoActionGmail();
 	bool DoActionEmailToAttachExport();
-	
-	// Refresh scrollbar colors from current theme
-	void RefreshScrollBarColors();
-	// Refresh all theme colors (caption, scrollbars, etc.)
-	void RefreshThemeColors();
 	bool DoActionEmailToAttachContent();
 	bool DoActionSlugify();
 	bool DoCopySelection();
@@ -476,11 +463,9 @@ protected:
 	afx_msg void OnChaiScriptPaste(UINT idIn);
     afx_msg LRESULT OnSelectAll(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnShowHideScrollBar(WPARAM wParam, LPARAM lParam);
-	afx_msg LRESULT OnUpdateScrollBar(WPARAM wParam, LPARAM lParam);
 	afx_msg void OnMenuSearchDescription();
 	afx_msg void OnMenuSearchFullText();
 	afx_msg void OnMenuSearchQuickPaste();
-	afx_msg void OnMenuShowStarredClips();
 	afx_msg void OnMenuSimpleTextSearch();
 	afx_msg LRESULT OnPostOptions(WPARAM wParam, LPARAM lParam);
 	afx_msg void OnMakeTopStickyClip();
@@ -515,8 +500,6 @@ public:
 	afx_msg void OnUpdateCliporderMovetotop(CCmdUI *pCmdUI);
 	afx_msg void OnMenuFilteron();
 	afx_msg void OnUpdateMenuFilteron(CCmdUI *pCmdUI);
-	afx_msg void OnMenuGoToEntry();
-	afx_msg void OnUpdateMenuGoToEntry(CCmdUI *pCmdUI);
 	afx_msg void OnAlwaysOnTopClicked();
 	//afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
 	afx_msg void OnSpecialpasteUppercase();
@@ -575,9 +558,7 @@ public:
 	afx_msg void OnUpdateOnSpecialPasteDontUpdateOrder(CCmdUI *pCmdUI);
 
 	afx_msg void OnSpecialpasteTrim();
-	afx_msg void OnSpecialpastePosixifyPaths();
 	afx_msg void OnUpdateSpecialpasteTrim(CCmdUI *pCmdUI);
-	afx_msg void OnUpdateSpecialPosixifyPaths(CCmdUI* pCmdUI);
 	afx_msg void OnTransparencyIncrease();
 	afx_msg void OnUpdateTransparencyIncrease(CCmdUI *pCmdUI);
 	afx_msg void OnTransparencyDecrease();
@@ -623,8 +604,4 @@ public:
 	afx_msg void OnUpdateSpecialpasteAsciitextonly(CCmdUI* pCmdUI);
 	afx_msg void OnImportExporttowebsearch();
 	afx_msg void OnUpdateImportExporttowebsearch(CCmdUI* pCmdUI);
-	afx_msg void OnSpecialpastePastenewguid();
-	afx_msg void OnUpdateSpecialpastePastenewguid(CCmdUI* pCmdUI);
-	afx_msg void OnSpecialpastePasteAsImage();
-	afx_msg void OnUpdateSpecialpastePasteAsImage(CCmdUI* pCmdUI);
 };

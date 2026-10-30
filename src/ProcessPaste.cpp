@@ -190,7 +190,8 @@ UINT CProcessPaste::MarkAsPastedThread(LPVOID pParam)
 			int clipCount = (int)pData->ids.GetCount();
 
 			if(CGetSetOptions::m_bUpdateTimeOnPaste && 
-				pData->updateClipOrder)
+				pData->updateClipOrder &&
+				clipCount == 1)
 			{
 				if (CGetSetOptions::m_refreshViewAfterPasting)
 				{
@@ -248,7 +249,9 @@ UINT CProcessPaste::MarkAsPastedThread(LPVOID pParam)
 			for (int i = 0; i < clipCount; i++)
 			{
 				int id = pData->ids.ElementAt(i);
+
 				theApp.RefreshClipInUI(id, refreshFlags);
+				break;
 			}			
 
 			delete pData;
