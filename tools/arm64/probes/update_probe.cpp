@@ -97,7 +97,7 @@ void CheckMissingInstaller(const std::wstring& path) {
 int wmain(int argc, wchar_t** argv) {
     try {
         if (argc == 3 && std::wstring(argv[1]) == L"--restart-check") {
-            RestartAndWait(argv[2]); std::cout << "PASS: application signaled database/main-window readiness.\n"; return 0;
+            RestartAndWait(argv[2]); std::cout << "PASS: application confirmed database/main-window readiness.\n"; return 0;
         }
         if (argc == 3 && std::wstring(argv[1]) == L"--missing-installer") return MissingInstallerChild(argv[2]);
         if (argc < 2) throw Error("Pass an isolated test directory.");

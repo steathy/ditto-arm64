@@ -138,8 +138,27 @@ void RestartAndWait(const std::wstring& executable) {
     auto ready = Own(rawEvent);
     if (eventError == ERROR_ALREADY_EXISTS) throw Error("Ditto's startup notification was already in use. Check whether Ditto is running.");
     HANDLE handles[] = {ready.get(), child.get()};
-    DWORD waited = WaitForMultipleObjects(2, handles, FALSE, 30000);
-    if (waited != WAIT_OBJECT_0 || WaitForSingleObject(child.get(), 250) == WAIT_OBJECT_0)
+    bool confirmed = false;
+    const auto deadline = GetTickCount64() + 30000;
+    do {
+        DWORD waited = WaitForMultipleObjects(2, handles, FALSE, 100);
+        if (waited == WAIT_OBJECT_0) { confirmed = true; break; }
+        if (waited != WAIT_TIMEOUT) break;
+        // Older released clients predate the event protocol. Their main-window
+        // registration is written only after opening the database. Require the
+        // newly launched process to own that window and finish GUI startup;
+        // an old handle, another Ditto instance or the no-database UI cannot pass.
+        DWORD value = 0, size = sizeof(value), owner = 0;
+        if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Ditto", L"MainhWnd", RRF_RT_REG_DWORD,
+            nullptr, &value, &size) == ERROR_SUCCESS) {
+            auto window = reinterpret_cast<HWND>(static_cast<uintptr_t>(value));
+            if (IsWindow(window)) GetWindowThreadProcessId(window, &owner);
+            if (owner == process.dwProcessId && WaitForInputIdle(child.get(), 0) == 0) {
+                confirmed = true; break;
+            }
+        }
+    } while (GetTickCount64() < deadline);
+    if (!confirmed || WaitForSingleObject(child.get(), 250) != WAIT_TIMEOUT)
         throw Error("Ditto was started but did not confirm a working database and main window. Check Ditto before continuing.");
 }
 std::shared_ptr<void> AcquireCacheLease(const std::wstring& root) {
