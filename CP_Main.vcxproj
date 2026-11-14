@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|ARM64">
@@ -531,7 +531,7 @@
   <ItemGroup>
     <ClCompile Include="src\About.cpp" />
     <ClCompile Include="src\update\UpdateModel.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
-    <ClCompile Include="src\update\UpdateWindows.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="src\update\UpdateWindows.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile><ClCompile Include="src\update\UpdateInstall.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
     <ClCompile Include="src\Accels.cpp" />
     <ClCompile Include="src\ActionEnums.cpp" />
     <ClCompile Include="src\AddType.cpp" />

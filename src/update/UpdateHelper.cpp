@@ -3,7 +3,7 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <objbase.h>
-#include "UpdateCore.h"
+#include "UpdateInstall.h"
 #include <filesystem>
 #include <cstdio>
 
@@ -51,28 +51,6 @@ public:
             + ", Windows error=" + std::to_string(error) + ")");
     }
 };
-void Restart(const std::wstring& executable) {
-    std::wstring command = L"\"" + executable + L"\"";
-    STARTUPINFOW startup{}; startup.cb = sizeof(startup); startup.dwFlags = STARTF_USESHOWWINDOW; startup.wShowWindow = SW_HIDE;
-    PROCESS_INFORMATION process{}; auto directory = fs::path(executable).parent_path().wstring();
-    if (!CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr, directory.c_str(), &startup, &process)) throw Error("Ditto could not be restarted. Open it from the Start menu.");
-    CloseHandle(process.hThread); CloseHandle(process.hProcess);
-}
-void CopyLocked(const std::wstring& source, const std::wstring& target) {
-    auto lock = LockFile(source);
-    if (!CopyFileW(FileApiPath(source).c_str(), FileApiPath(target).c_str(), TRUE)) throw Error("Backup could not copy a file. Installation was not started.");
-    // Confirm the bytes in the backup before allowing any installation.
-    LARGE_INTEGER size{};
-    if (!GetFileSizeEx(lock.get(), &size)) throw Error("Backup could not read a file size.");
-    auto copy = LockFile(target); LARGE_INTEGER copied{};
-    if (!GetFileSizeEx(copy.get(), &copied) || size.QuadPart != copied.QuadPart) throw Error("Backup verification failed.");
-    unsigned char left[65536], right[65536];
-    for (;;) {
-        DWORD a = 0, b = 0;
-        if (!ReadFile(lock.get(), left, sizeof(left), &a, nullptr) || !ReadFile(copy.get(), right, sizeof(right), &b, nullptr) || a != b || memcmp(left, right, a)) throw Error("Backup verification failed.");
-        if (!a) break;
-    }
-}
 void ExportSettings(const std::wstring& directory) {
     wchar_t system[MAX_PATH]; if (!GetSystemDirectoryW(system, MAX_PATH)) throw Error("Cannot locate Windows registry export.");
     std::wstring reg = std::wstring(system) + L"\\reg.exe";
@@ -91,59 +69,33 @@ std::wstring StartupCommand() {
     if (result != ERROR_SUCCESS) throw Error("Cannot read Ditto startup registration.");
     return buffer;
 }
-void Backup(const std::wstring& application, const std::wstring& database,
-    const std::wstring& directory, const std::wstring& startup) {
-    RejectReparsePath(application); RejectReparsePath(database);
-    if (database.rfind(L"\\\\", 0) == 0) throw Error("Automatic updates cannot back up a database on a network share.");
-    auto appCopy = directory + L"\\application"; EnsurePrivateDirectory(appCopy);
-    auto dataCopy = directory + L"\\database"; EnsurePrivateDirectory(dataCopy);
-    std::vector<fs::path> files;
-    uint64_t bytes = 64 * 1024 * 1024;
-    for (const auto& entry : fs::recursive_directory_iterator(application)) {
-        RejectReparsePath(entry.path().wstring());
-        if (entry.is_regular_file()) { files.push_back(entry.path()); bytes += entry.file_size(); }
-    }
-    // Acquire every database/WAL handle before copying. This refuses an active
-    // writer (including another Ditto instance) instead of copying a live DB.
-    std::vector<std::pair<std::wstring, std::shared_ptr<void>>> databaseLocks;
-    for (const auto* suffix : {L"", L"-wal", L"-shm"}) {
-        auto path = database + suffix;
-        if (*suffix && !fs::exists(path)) continue;
-        auto lock = LockFile(path); LARGE_INTEGER size{};
-        if (!GetFileSizeEx(lock.get(), &size)) throw Error("Cannot inspect database backup size.");
-        bytes += static_cast<uint64_t>(size.QuadPart);
-        databaseLocks.emplace_back(path, lock);
-    }
-    ULARGE_INTEGER free{};
-    if (!GetDiskFreeSpaceExW(directory.c_str(), &free, nullptr, nullptr) || free.QuadPart < bytes) throw Error("Not enough space for a complete backup. Installation was not started.");
-    for (const auto& path : files) {
-        auto relative = path.lexically_relative(application);
-        auto target = fs::path(appCopy) / relative;
-        fs::create_directories(target.parent_path());
-        CopyLocked(path.wstring(), target.wstring());
-    }
-    for (const auto& entry : databaseLocks) CopyLocked(entry.first, (fs::path(dataCopy) / fs::path(entry.first).filename()).wstring());
-    ExportSettings(directory);
-    WriteNewFile(directory + L"\\backup.json", "{\"application\":" + JsonQuote(application) + ",\"database\":" + JsonQuote(database) + ",\"startupCommand\":" + JsonQuote(startup) + "}");
+
 }
-}
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int RunHelper() {
     std::wstring executable, backup;
     InstallLog log;
-    bool stopped = false;
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     try {
+        int argc = 0; wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+        if (!argv) throw Error("Invalid update handoff.");
+        std::shared_ptr<void> arguments(argv, [](void* p) { LocalFree(p); });
+        if (argc == 2 && std::wstring(argv[1]) == L"--clear-cache") {
+            auto root = PrivateCacheRoot();
+            auto prompt = L"Delete this user's update backups and downloaded installers? Backups can contain old clipboard history.\n\n" + root +
+                L"\n\nThe live clipboard database and Ditto settings will be kept. This deletion cannot be undone.";
+            if (MessageBoxW(nullptr, prompt.c_str(), L"Remove Ditto update backups", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2 | MB_SETFOREGROUND) == IDYES)
+                RemoveUpdateCache(root);
+            CoUninitialize(); return 0;
+        }
         HANDLE rawToken = nullptr;
         if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &rawToken)) throw Error("Cannot check update helper identity.");
         auto token = Handle(rawToken); TOKEN_ELEVATION elevation{}; DWORD bytes = 0;
         if (!GetTokenInformation(token.get(), TokenElevation, &elevation, sizeof(elevation), &bytes) || elevation.TokenIsElevated) throw Error("Start updates from Ditto running as your normal user, not as administrator.");
-        int argc = 0; wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-        if (!argv) throw Error("Invalid update handoff.");
-        std::shared_ptr<void> arguments(argv, [](void* p) { LocalFree(p); });
         if (argc != 3 || std::wstring(argv[1]) != L"--install") throw Error("This helper is started by Ditto's Install now button.");
         fs::path ticketPath(argv[2]);
         if (ticketPath.filename() != L"install.json" || ticketPath.parent_path().filename().wstring().rfind(L"install-", 0) != 0
             || !SamePath(ticketPath.parent_path().parent_path().wstring(), PrivateCacheRoot())) throw Error("Invalid install handoff location.");
+        auto lease = AcquireCacheLease(PrivateCacheRoot());
         log.Open(ticketPath.parent_path());
         log.Write("Update helper started.");
         STARTUPINFOW startupInfo{}; startupInfo.cb = sizeof(startupInfo); GetStartupInfoW(&startupInfo);
@@ -187,44 +139,80 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         }
         auto startup = StartupCommand();
         backup = PrivateCacheRoot() + L"\\backup-" + UniqueName(); EnsurePrivateDirectory(backup);
-        log.Write("Verification passed; requesting shutdown of Ditto process " + std::to_string(pid) + ".");
-        if (!PostMessageW(window, WM_CLOSE, 0, 0)) throw Error("Ditto could not be closed cleanly.");
-        if (WaitForSingleObject(parent.get(), 30000) != WAIT_OBJECT_0) throw Error("Ditto is still open. Save your work and try the update again.");
-        stopped = true;
-        log.Write("Ditto exited; creating backup.");
-        Backup(application, database, backup, startup);
-        log.Write("Backup complete: " + Utf8(backup));
-        std::wstring parameters = L"/SP- /SILENT /NORESTART /RESTARTEXITCODE=3010 /NOCLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /DIR=\"" + application + L"\" ";
-        parameters += startup.empty() ? L"/TASKS=\"\"" : L"/TASKS=RunAtStartup";
-        log.InspectPath("Installer", installerPath);
-        log.InspectPath("Installer directory", fs::path(installerPath).parent_path().wstring());
-        log.Write("Requesting Windows elevation.");
-        auto setup = LaunchInstallerProcess(installerPath, parameters);
-        log.Write("Installer started; process ID " + std::to_string(GetProcessId(setup.get())) + ".");
-        if (WaitForSingleObject(setup.get(), INFINITE) != WAIT_OBJECT_0) throw Error("Could not wait for the installer (Windows error " + std::to_string(GetLastError()) + ").");
-        DWORD code = 1;
-        if (!GetExitCodeProcess(setup.get(), &code) || (code != 0 && code != 3010)) throw Error("Installer did not complete successfully (exit " + std::to_string(code) + "). The backup has been retained.");
-        log.Write("Installer completed with exit code " + std::to_string(code) + "; verifying installed application.");
-        {
+        DWORD installerCode = 1;
+        InstallActions actions;
+        actions.close = [&] {
+            log.Write("Verification passed; requesting shutdown of Ditto process " + std::to_string(pid) + ".");
+            if (!PostMessageW(window, WM_CLOSE, 0, 0)) throw Error("Ditto could not be closed cleanly.");
+        };
+        actions.waitForExit = [&](uint32_t timeout) {
+            DWORD result = WaitForSingleObject(parent.get(), timeout);
+            if (result == WAIT_FAILED) throw Error("Could not monitor the original Ditto process.");
+            return result == WAIT_OBJECT_0;
+        };
+        actions.waiting = [&] {
+            log.Write("Ditto is taking longer to close; retaining shutdown monitoring.");
+            MessageBoxW(nullptr, L"Ditto is taking longer than expected to close. Save and close any open Ditto dialogs. The update will wait for Ditto to exit before backing up or installing. It has not started installation.",
+                L"Waiting for Ditto", MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND);
+        };
+        actions.backup = [&] {
+            log.Write("Ditto exited; creating backup.");
+            BackupInstallation(application, database, backup, startup, ExportSettings);
+            log.Write("Backup complete: " + Utf8(backup));
+        };
+        actions.install = [&] {
+            std::wstring parameters = L"/SP- /SILENT /NORESTART /RESTARTEXITCODE=3010 /NOCLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /DIR=\"" + application + L"\" ";
+            parameters += startup.empty() ? L"/TASKS=\"\"" : L"/TASKS=RunAtStartup";
+            log.InspectPath("Installer", installerPath);
+            log.Write("Requesting Windows elevation.");
+            auto setup = LaunchInstallerProcess(installerPath, parameters);
+            log.Write("Installer started; process ID " + std::to_string(GetProcessId(setup.get())) + ".");
+            if (WaitForSingleObject(setup.get(), INFINITE) != WAIT_OBJECT_0) throw Error("Could not wait for the installer.");
+            if (!GetExitCodeProcess(setup.get(), &installerCode) || (installerCode != 0 && installerCode != 3010))
+                throw Error("Installer did not complete successfully (exit " + std::to_string(installerCode) + "). The backup has been retained.");
+        };
+        actions.verify = [&] {
             auto app = LockFile(executable);
             VerifyPublisher(app.get(), executable, manifest.release.version, L"Ditto ARM64", unsignedConsent);
+            log.Write("Installed application version and publisher verified.");
+        };
+        actions.restart = [&] { RestartAndWait(executable); log.Write("Ditto confirmed a working database and main window."); };
+        auto result = RunInstallTransaction(actions);
+        if (!result.success) {
+            try { WriteNewFile(backup + L"\\update-failed", "1"); } catch (...) {}
+            log.Write("Update failed; recovery attempted before formatting the diagnostic.");
+            if (result.recovered) log.Write("Ditto restarted after failure.");
+            auto message = result.error + L"\n\nBackup location: " + backup + L"\n\nUpdate log: " + log.path;
+            MessageBoxW(nullptr, message.c_str(), L"Ditto ARM64 update", MB_OK | MB_ICONEXCLAMATION | MB_SETFOREGROUND);
+            CoUninitialize(); return 1;
         }
-        Restart(executable); stopped = false;
-        log.Write("Updated application verified and restarted.");
+        // A cleanup failure must never turn a successful installation into failure.
+        try { MarkBackupSuccessful(backup); PruneUpdateCache(PrivateCacheRoot(), ticketPath.parent_path().wstring()); }
+        catch (const std::exception& error) { log.Write(std::string("Backup retention: ") + error.what()); }
         std::wstring success = L"Ditto ARM64 " + Wide(manifest.release.version.String()) + L" was updated successfully and has restarted.";
-        if (code == 3010) success += L"\n\nWindows reports that a restart is needed to finish replacing some files. No restart will happen automatically.";
+        if (installerCode == 3010) success += L"\n\nWindows reports that a restart is needed to finish replacing some files. No restart will happen automatically.";
+        success += L"\n\nThe latest two successful-update backups are kept here:\n" + PrivateCacheRoot() +
+            L"\nBackups contain clipboard history. Failed and older unclassified backups may also remain; uninstall offers explicit removal.";
         MessageBoxW(nullptr, success.c_str(), L"Update successful", MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND);
         CoUninitialize(); return 0;
     } catch (const std::exception& error) {
         log.Write(std::string("Failure: ") + error.what());
-        std::wstring message = Wide(error.what());
-        if (stopped) {
-            try { Restart(executable); log.Write("Existing Ditto restarted after failure."); }
-            catch (const std::exception& restartError) { log.Write(std::string("Restart failed: ") + restartError.what()); message += L"\n\n" + Wide(restartError.what()); }
-        }
+        std::wstring message = DiagnosticText(error.what());
         if (!backup.empty()) message += L"\n\nBackup location: " + backup;
         if (!log.path.empty()) message += L"\n\nUpdate log: " + log.path;
         MessageBoxW(nullptr, message.c_str(), L"Ditto ARM64 update", MB_OK | MB_ICONEXCLAMATION | MB_SETFOREGROUND);
+        CoUninitialize(); return 1;
+    } catch (...) {
+        MessageBoxW(nullptr, L"An unexpected update error occurred. Check Ditto and open it from the Start menu if needed.", L"Ditto ARM64 update", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
+        CoUninitialize(); return 1;
+    }
+}
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+    // Covers exceptions raised inside an error handler as well as the main body.
+    try { return RunHelper(); }
+    catch (...) {
+        MessageBoxW(nullptr, L"The update could not finish. Check Ditto and open it from the Start menu if needed. Recovery backups have been retained.",
+            L"Ditto ARM64 update", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
         CoUninitialize(); return 1;
     }
 }

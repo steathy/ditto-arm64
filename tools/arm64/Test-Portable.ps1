@@ -16,7 +16,12 @@ Copy-Item -Path (Join-Path $PackagePath '*') -Destination $testPath -Recurse
 $database = Join-Path $testPath 'test.db'
 @('[Ditto]','ConnectedToClipboard=0','DisableRecieve=1','DittoHotKey=0','DittoHotKey2=0','DittoHotKey3=0','EnableDebugLogging=0','CheckForUpdates=0',"DBPath3=$database") | Set-Content -LiteralPath (Join-Path $testPath 'Ditto.Settings') -Encoding Unicode
 $executable = Join-Path $testPath 'Ditto.exe'
-$process = Start-Process -FilePath $executable -WorkingDirectory $testPath -WindowStyle Hidden -PassThru
+$probe = [IO.File]::ReadAllText((Join-Path $repoRoot 'work/last-updater-probe.txt'))
+& $probe --restart-check $executable
+if ($LASTEXITCODE) { throw 'The production restart/readiness check failed.' }
+$process = @(Get-Process Ditto -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $executable })
+if ($process.Count -ne 1) { throw 'Expected exactly one isolated Ditto instance.' }
+$process = $process[0]
 try {
     $null = $process.WaitForInputIdle(10000)
     $requiredModules = @('ICU_Loader.dll','DittoUtil.dll','mfc140u.dll','msvcp140.dll','vcruntime140.dll')
@@ -60,7 +65,14 @@ try {
     & .\database_probe.exe $database (Join-Path $testPath 'ICU_Loader.dll') *> database-run.log
     if ($LASTEXITCODE) { throw "Database probe failed. See $testPath\database-run.log" }
     Get-Content database-run.log
+    & cl.exe /nologo /std:c++17 /MD /O2 /W4 /DUNICODE /D_UNICODE "/I$repoRoot\src\sqlite" "$PSScriptRoot\probes\clipboard_probe.cpp" $sqliteObject /Fe:clipboard_probe.exe *> clipboard-build.log
+    if ($LASTEXITCODE) { throw "Clipboard probe compilation failed. See $testPath\clipboard-build.log" }
+    $captureDatabase = Join-Path $testPath 'capture.db'
+    @('[Ditto]','ConnectedToClipboard=1','DisableRecieve=1','DittoHotKey=0','DittoHotKey2=0','DittoHotKey3=0','EnableDebugLogging=0','CheckForUpdates=0',"DBPath3=$captureDatabase") | Set-Content -LiteralPath (Join-Path $testPath 'Ditto.Settings') -Encoding Unicode
+    & .\clipboard_probe.exe $executable $captureDatabase *> clipboard-run.log
+    if ($LASTEXITCODE) { Get-Content clipboard-run.log; throw "Clipboard capture/paste probe failed. See $testPath\clipboard-run.log" }
+    Get-Content clipboard-run.log
 } finally { Pop-Location }
-$result = [ordered]@{passed=$true;package=$PackagePath;testDirectory=$testPath;loadedFromPackage=$loaded;startup=$true;openCloseCommands=$true;cleanShutdown=$true;databaseIntegrity=$true;capturedClipCount=0;icuRegex=$true;icuUnicodeCaseConversion=$true;visualUiInspection=$false}
+$result = [ordered]@{passed=$true;package=$PackagePath;testDirectory=$testPath;loadedFromPackage=$loaded;startup=$true;startupReadinessConfirmed=$true;openCloseCommands=$true;cleanShutdown=$true;databaseIntegrity=$true;isolatedClipboardCapture=$true;recordedClipPaste=$true;keyboardInputDelivery=$false;icuRegex=$true;icuUnicodeCaseConversion=$true;visualUiInspection=$false}
 $result | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $testPath 'smoke-results.json') -Encoding utf8
 Write-Output "PASS: isolated startup, bundled module loading, open/close commands and clean shutdown. Results: $testPath"

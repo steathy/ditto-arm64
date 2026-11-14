@@ -93,11 +93,16 @@ void CheckMissingInstaller(const std::wstring& path) {
     Require(waited == WAIT_OBJECT_0 && code == 0, "missing installer returns a numeric Windows error without an invisible-dialog hang");
 }
 }
+#include "update_maintenance_probe.h"
 int wmain(int argc, wchar_t** argv) {
     try {
+        if (argc == 3 && std::wstring(argv[1]) == L"--restart-check") {
+            RestartAndWait(argv[2]); std::cout << "PASS: application signaled database/main-window readiness.\n"; return 0;
+        }
         if (argc == 3 && std::wstring(argv[1]) == L"--missing-installer") return MissingInstallerChild(argv[2]);
         if (argc < 2) throw Error("Pass an isolated test directory.");
         std::wstring root = argv[1]; EnsurePrivateDirectory(root);
+        MaintenanceChecks(root);
         auto launchRoot = root + L"\\launch error fixture"; EnsurePrivateDirectory(launchRoot);
         CheckMissingInstaller(launchRoot + L"\\missing-installer.exe");
         CheckMissingInstaller(launchRoot + L"\\missing-directory\\installer.exe");
@@ -117,7 +122,7 @@ int wmain(int argc, wchar_t** argv) {
         Reject([&] { ParseManifest(Replace(base, "\"size\":" + std::to_string(payload.size()), "\"size\":209715201")); }, "oversized installer");
         Reject([&] { ParseManifest(Replace(base, "\"sha256\":\"", "\"sha256\":\"g")); }, "invalid hash");
         Reject([&] { ParseManifest(Replace(base, "\"installer\":{", "\"command\":\"run\",\"installer\":{")); }, "remote commands cannot enter schema");
-        Require(!CheckOptions{}.includeBeta, "stable updates are the default even on a nightly build");
+        Require(!CheckOptions{}.includeBeta, "core caller must explicitly select beta; UI uses saved preference/build channel");
         Require(std::wstring(BuildLabel(Channel::Beta)) == L"Nightly Build" && std::wstring(BuildLabel(Channel::Stable)) == L"Stable Build", "requested build display labels");
         Require(ParseChannel("beta") == Channel::Beta && ParseChannel("stable") == Channel::Stable, "helper channel keys parsed");
         Reject([&] { ParseChannel("nightly"); }, "handoff rejects unknown channel keys");

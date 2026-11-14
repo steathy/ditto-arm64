@@ -22,7 +22,11 @@ To test a produced package on Windows ARM64, use the directory path printed by t
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\arm64\Test-Portable.ps1 -PackagePath 'artifacts\DittoPortable-arm64-<timestamp>'
 ```
 
-The test launches a separate copy with its own database, disables clipboard capture, receiving and global hotkeys, checks startup/module loading and open/close/exit commands, and verifies database integrity plus ICU regex/Unicode conversion. It leaves the installed Ditto instance alone. This is a smoke test, not visual inspection or full clipboard interoperability testing. It requires the Release SQLite object produced by the build.
+The test launches a separate copy with its own database, disables clipboard capture, receiving and global hotkeys, checks startup/module loading and open/close/exit commands, and verifies database integrity plus ICU regex/Unicode conversion. It leaves the installed Ditto instance alone. It also requires the production startup-readiness signal, then enables real capture
+in a separate window station with its own clipboard/database. It restores a stored
+Unicode clip and pastes into a native edit control. The interactive clipboard is
+untouched. Keyboard input delivery, visual inspection and broader application
+interoperability remain separate tests. It requires the Release SQLite object produced by the build.
 
 Before committing or publishing, stage the intended source files and run:
 
@@ -38,7 +42,7 @@ This checks for generated/sensitive files, common credential patterns, local acc
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\arm64\Test-Updater.ps1
 ```
 
-This runs 120 native fixture checks without using personal clipboard data or
+This runs 167 native fixture checks without using personal clipboard data or
 installing software. Add `-LiveFeed` to test the actual GitHub feed request too.
 Signed-ready fixtures use an explicitly injected test verifier; unsigned PE checks
 use the production verifier with an unsigned test executable. The shipped client

@@ -1,4 +1,4 @@
-﻿// About.cpp : implementation file
+// About.cpp : implementation file
 // test test test
 
 //Main branch test
@@ -140,7 +140,7 @@ BOOL CAbout::OnInitDialog()
 	m_UpstreamRepositoryName.SetURL(_T(DITTO_UPSTREAM_REPOSITORY_URL));
 
 	m_ReleaseNotes.SetAutoSize(FALSE);
-	m_IncludeBeta.SetCheck(CGetSetOptions::GetProfileLong(_T("Arm64IncludeBetaUpdates"), 0) == 1 ? BST_CHECKED : BST_UNCHECKED);
+	m_IncludeBeta.SetCheck(ditto_update::IncludeBetaUpdates(CGetSetOptions::GetProfileLong(_T("Arm64IncludeBetaUpdates"), -1), DITTO_ARM64_NIGHTLY_BUILD != 0) ? BST_CHECKED : BST_UNCHECKED);
 	m_UpdateProgress.SetRange32(0, 1000);
 	m_InstallToolTip.Create(this, TTS_ALWAYSTIP | TTS_NOPREFIX);
 	m_InstallToolTip.SetMaxTipWidth(420);
@@ -191,7 +191,7 @@ void CAbout::OnCheckUpdate()
 		options.cacheRoot = PrivateCacheRoot();
 		m_update->Set(Phase::Checking, L"Checking for ARM64 updates...");
 		StartCheck(m_update, options);
-	} catch (const std::exception& error) { m_update->Set(Phase::Failed, Wide(error.what())); }
+	} catch (const std::exception& error) { m_update->Set(Phase::Failed, DiagnosticText(error.what())); }
 	RefreshUpdate();
 }
 
@@ -323,6 +323,10 @@ void CAbout::RefreshUpdate()
 
 bool CAbout::CanInstallUpdate()
 {
+	if (!theApp.m_MainhWnd || !::IsWindow(theApp.m_MainhWnd)) {
+		AfxMessageBox(_T("Open a working Ditto database before installing an update. You can still check releases and download the installer."));
+		return false;
+	}
 	auto sheet = DYNAMIC_DOWNCAST(COptionsSheet, GetParent());
 	if (sheet && sheet->HasPendingChanges()) {
 		AfxMessageBox(_T("Save your Options changes with OK, then reopen About to install the update. The download will remain cached."));
@@ -368,9 +372,9 @@ void CAbout::OnInstallUpdate()
 	try {
 		std::thread([session, ready, executable, database, pid, window, unsignedConsent] {
 			try { LaunchInstallHelper(ready, executable, database, pid, window, unsignedConsent); }
-			catch (const std::exception& error) { session->Set(Phase::Failed, Wide(error.what())); }
+			catch (const std::exception& error) { session->Set(Phase::Failed, DiagnosticText(error.what())); }
 		}).detach();
-	} catch (const std::exception& error) { session->Set(Phase::Failed, Wide(error.what())); }
+	} catch (const std::exception& error) { session->Set(Phase::Failed, DiagnosticText(error.what())); }
 	RefreshUpdate();
 }
 

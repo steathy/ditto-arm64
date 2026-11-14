@@ -14,7 +14,7 @@ Push-Location $testPath
 try {
     & rc.exe /nologo /fo update_fixture.res "$PSScriptRoot\probes\update_fixture.rc" *> resource.log
     if ($LASTEXITCODE) { throw 'Updater test resource compilation failed.' }
-    & cl.exe /nologo /std:c++17 /EHsc /MT /O2 /W4 /DUNICODE /D_UNICODE /D_WIN32_WINNT=0x0A00 "$PSScriptRoot\probes\update_probe.cpp" "$repoRoot\src\update\UpdateModel.cpp" "$repoRoot\src\update\UpdateWindows.cpp" update_fixture.res /Fe:update_probe.exe /link /MANIFEST:EMBED "/MANIFESTINPUT:$repoRoot\src\update\UpdateHelper.manifest" *> build.log
+    & cl.exe /nologo /std:c++17 /EHsc /MT /O2 /W4 /DUNICODE /D_UNICODE /D_WIN32_WINNT=0x0A00 "$PSScriptRoot\probes\update_probe.cpp" "$repoRoot\src\update\UpdateModel.cpp" "$repoRoot\src\update\UpdateWindows.cpp" "$repoRoot\src\update\UpdateInstall.cpp" update_fixture.res /Fe:update_probe.exe /link /MANIFEST:EMBED "/MANIFESTINPUT:$repoRoot\src\update\UpdateHelper.manifest" *> build.log
     if ($LASTEXITCODE) { Get-Content .\build.log -Tail 40; throw 'Updater test compilation failed.' }
     $arguments = @('"' + (Join-Path $testPath 'fixtures') + '"', '"' + (Join-Path $repoRoot 'ARM64\Release\Ditto.exe') + '"')
     if ($LiveFeed) { $arguments += '--live-feed' }
@@ -24,5 +24,6 @@ try {
     Get-Content .\errors.log
     if ($testExit) { throw 'Updater tests failed.' }
     if (!(Select-String -LiteralPath .\results.log -SimpleMatch 'PASS:')) { throw 'Updater test did not report completion.' }
+    [IO.File]::WriteAllText((Join-Path $repoRoot 'work/last-updater-probe.txt'), (Join-Path $testPath 'update_probe.exe'))
     Write-Output "Updater test evidence: $testPath"
 } finally { Pop-Location }

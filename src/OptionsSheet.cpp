@@ -14,6 +14,23 @@
 #include "OptionsCopyBuffers.h"
 #include "Misc.h"
 #include "QuickPasteKeyboard.h"
+#include "OptionsChangeTracking.h"
+
+namespace {
+// Observe changes at the page boundary, including controls whose existing
+// handlers bypass the MFC default handler. Initial population is never dirty.
+// Pushbuttons on editable pages are conservatively dirty because they can open
+// nested editors or alter lists; saving with OK also covers those changes.
+template<class Page> class CTrackedOptionsPage : public Page {
+    bool initialized = false;
+    LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) override {
+        if (initialized && IsOptionsChange(message, wParam, lParam)) this->SetModified(TRUE);
+        LRESULT result = Page::WindowProc(message, wParam, lParam);
+        if (message == WM_INITDIALOG) initialized = true;
+        return result;
+    }
+};
+}
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -49,14 +66,14 @@ COptionsSheet::COptionsSheet(LPCTSTR pszCaption, CWnd* pParentWnd, UINT iSelectP
 	// Omit Apply before layout so OK and Cancel use the rightmost button slots.
 	m_psh.dwFlags |= PSH_NOAPPLYNOW;
 
-	m_pGeneralOptions = new COptionsGeneral;
-	m_pKeyBoardOptions = new COptionsKeyBoard;
+	m_pGeneralOptions = new CTrackedOptionsPage<COptionsGeneral>;
+	m_pKeyBoardOptions = new CTrackedOptionsPage<COptionsKeyBoard>;
 	//m_pQuickPasteOptions = new COptionsQuickPaste;
-	m_pQuickPasteShortCuts = new CQuickPasteKeyboard;
+	m_pQuickPasteShortCuts = new CTrackedOptionsPage<CQuickPasteKeyboard>;
 
-	m_pCopyBuffers = new COptionsCopyBuffers;
+	m_pCopyBuffers = new CTrackedOptionsPage<COptionsCopyBuffers>;
 	m_pStats = new COptionsStats;
-	m_pTypes = new COptionsTypes;
+	m_pTypes = new CTrackedOptionsPage<COptionsTypes>;
 	m_pAbout = new CAbout;
 
 	AddPage(m_pGeneralOptions);
@@ -67,7 +84,7 @@ COptionsSheet::COptionsSheet(LPCTSTR pszCaption, CWnd* pParentWnd, UINT iSelectP
 	AddPage(m_pQuickPasteShortCuts);
 	if(CGetSetOptions::GetAllowFriends())
 	{
-		m_pFriends = new COptionFriends;
+		m_pFriends = new CTrackedOptionsPage<COptionFriends>;
 		AddPage(m_pFriends);
 	}
 	AddPage(m_pStats);

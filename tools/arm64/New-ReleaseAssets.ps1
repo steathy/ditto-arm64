@@ -56,7 +56,9 @@ try {
     $writer = [IO.StreamWriter]::new($sourceArchive.CreateEntry($prefix + '.ditto-source.json').Open())
     try { $writer.Write((@{commit=$zlibCommit;files=$sourceHashes} | ConvertTo-Json -Depth 4)) } finally { $writer.Dispose() }
 } finally { $dependencyArchive.Dispose(); $sourceArchive.Dispose() }
-$notes = if (Test-Path $metadata.notesPath) { (Get-Content $metadata.notesPath -Raw).Trim() } else { "Ditto Windows ARM64 $($metadata.version) development build." }
+. "$PSScriptRoot/ReleaseText.ps1"
+$notes = if (Test-Path $metadata.notesPath) { (Read-ReleaseText $metadata.notesPath).Trim() } else { throw 'Release notes are required.' }
+$updateNotes = ConvertTo-UpdateNotes $notes
 if ([Text.Encoding]::UTF8.GetByteCount($notes) -gt 8192) { throw 'Release notes exceed the updater limit of 8 KiB.' }
 [IO.File]::WriteAllText("$metadataDirectory/release-notes.md", $notes + "`n")
 $entry = [ordered]@{
@@ -64,7 +66,7 @@ $entry = [ordered]@{
     publishedAt = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
     minimumWindowsBuild = 22000
     releaseNotesUrl = "https://github.com/steathy/ditto-arm64/releases/tag/$($metadata.tag)"
-    releaseNotes = $notes
+    releaseNotes = $updateNotes
     installer = [ordered]@{
         url = "https://github.com/steathy/ditto-arm64/releases/download/$($metadata.tag)/$installerName"
         sha256 = (Get-FileHash -LiteralPath $installer).Hash.ToLowerInvariant()

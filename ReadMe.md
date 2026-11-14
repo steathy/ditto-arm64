@@ -10,8 +10,8 @@ with or endorsed by the original Ditto project or its maintainers.
 the official stable release, pinned to commit
 [`81a667c`](https://github.com/sabrogden/Ditto/commit/81a667c790f5a6c9b6b63f187eb75e79bf159670).
 
-**This branch's ARM64 build:** `3.25.113.2` — **Stable Build**
-(upstream stable 3.25.113.0, ARM64 revision 2).
+**This branch's ARM64 build:** `3.25.113.3` — **Stable Build**
+(upstream stable 3.25.113.0, ARM64 revision 3).
 Project and updates: [steathy/ditto-arm64](https://github.com/steathy/ditto-arm64).
 
 | Download | ARM64 version | Upstream baseline |
@@ -46,13 +46,16 @@ release. See the [original project](https://github.com/sabrogden/Ditto) and its
 - Native ARM64 build configuration, dependencies and installer packaging.
 - About-page builder credits, links to both projects, and corrected button layout.
 - A manual **Check Update** workflow using this fork's JSON feed, with one latest
-  stable release and one latest beta release. Stable is the default; **Include beta
-  updates (Nightly Builds)** opts into the newest of both. The workflow shows version,
+  stable release and one latest beta release. An unset preference follows the build
+  channel; saved choices are preserved. **Include beta updates (Nightly Builds)**
+  selects the newest of both. The workflow shows version,
   release notes, download progress, SHA-256/signature verification, and an
   installation prompt. Unsigned releases require an explicit warning/confirmation;
   incorrect hashes and invalid signatures are blocked. Installation uses a separate helper for backup,
   graceful shutdown, Windows elevation and restart, followed by a success dialog.
-  Launch errors are reported visibly and recorded in a local update log.
+  Launch errors are reported visibly and recorded in a local update log. Unsaved
+  Options edits block installation. Backups have a retention policy; old unclassified
+  backups require explicit removal. Transient download failures are retried safely.
 
 The port retains Ditto's existing clipboard capture, history, search and paste
 features; it does not intentionally redesign their core behavior. Compatibility

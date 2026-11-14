@@ -167,6 +167,7 @@ bool IsAllowedDownloadUrl(const std::wstring& url, bool redirect) {
     return std::none_of(url.begin(), url.end(), [](wchar_t c) { return c <= 32 || c >= 127 || c == L'\\' || c == L'#' || c == L'"'; });
 }
 const char* ChannelKey(Channel channel) { return channel == Channel::Beta ? "beta" : "stable"; }
+bool IncludeBetaUpdates(int savedPreference, bool nightlyBuild) { return savedPreference == -1 ? nightlyBuild : savedPreference == 1; }
 const wchar_t* BuildLabel(Channel channel) { return channel == Channel::Beta ? L"Nightly Build" : L"Stable Build"; }
 Channel ParseChannel(const std::string& channel) {
     if (channel == "stable") return Channel::Stable;
