@@ -17,8 +17,8 @@ Project and updates: [steathy/ditto-arm64](https://github.com/steathy/ditto-arm6
 
 | Download | ARM64 version | Upstream baseline |
 |---|---|---|
-| [Stable](https://github.com/steathy/ditto-arm64/releases/tag/v3.25.113.2) | 3.25.113.2 | Official stable 3.25.113.0 |
-| [Nightly / beta](https://github.com/steathy/ditto-arm64/releases/tag/v3.25.146.10) | 3.25.146.10 | Nightly build-number-146 |
+| [Stable](https://github.com/steathy/ditto-arm64/releases/tag/v3.25.113.3) | 3.25.113.3 | Official stable 3.25.113.0 |
+| [Nightly / beta](https://github.com/steathy/ditto-arm64/releases/tag/v3.25.146.11) | 3.25.146.11 | Nightly build-number-146 |
 
 Each release has an installer, portable ZIP and source ZIP including zlib.
 Checksums are in the release notes. GitHub also adds repository-only source archives.
