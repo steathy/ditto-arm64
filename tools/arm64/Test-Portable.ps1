@@ -65,6 +65,14 @@ try {
     & .\database_probe.exe $database (Join-Path $testPath 'ICU_Loader.dll') *> database-run.log
     if ($LASTEXITCODE) { throw "Database probe failed. See $testPath\database-run.log" }
     Get-Content database-run.log
+    & rc.exe /nologo /fo options_fixture.res "$PSScriptRoot\probes\options_probe.rc" *> options-resource.log
+    if ($LASTEXITCODE) { throw 'Options probe resource compilation failed.' }
+    & cl.exe /nologo /std:c++17 /EHsc /MD /O2 /W4 /D_AFXDLL /DUNICODE /D_UNICODE "$PSScriptRoot\probes\options_probe.cpp" options_fixture.res /Fe:options_probe.exe *> options-build.log
+    if ($LASTEXITCODE) { Get-Content options-build.log; throw 'Options probe compilation failed.' }
+    $optionsProbe = Start-Process -FilePath (Join-Path $testPath 'options_probe.exe') -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $testPath 'options-run.log') -RedirectStandardError (Join-Path $testPath 'options-errors.log')
+    if (!$optionsProbe.WaitForExit(20000)) { Stop-Process -Id $optionsProbe.Id; throw 'Options probe timed out.' }
+    if ($optionsProbe.ExitCode) { Get-Content options-errors.log; throw 'Options modification tracking failed.' }
+    Get-Content options-run.log
     & cl.exe /nologo /std:c++17 /MD /O2 /W4 /DUNICODE /D_UNICODE "/I$repoRoot\src\sqlite" "$PSScriptRoot\probes\clipboard_probe.cpp" $sqliteObject /Fe:clipboard_probe.exe *> clipboard-build.log
     if ($LASTEXITCODE) { throw "Clipboard probe compilation failed. See $testPath\clipboard-build.log" }
     $captureDatabase = Join-Path $testPath 'capture.db'
@@ -73,6 +81,6 @@ try {
     if ($LASTEXITCODE) { Get-Content clipboard-run.log; throw "Clipboard capture/paste probe failed. See $testPath\clipboard-run.log" }
     Get-Content clipboard-run.log
 } finally { Pop-Location }
-$result = [ordered]@{passed=$true;package=$PackagePath;testDirectory=$testPath;loadedFromPackage=$loaded;startup=$true;startupReadinessConfirmed=$true;openCloseCommands=$true;cleanShutdown=$true;databaseIntegrity=$true;isolatedClipboardCapture=$true;recordedClipPaste=$true;keyboardInputDelivery=$false;icuRegex=$true;icuUnicodeCaseConversion=$true;visualUiInspection=$false}
+$result = [ordered]@{passed=$true;package=$PackagePath;testDirectory=$testPath;loadedFromPackage=$loaded;startup=$true;startupReadinessConfirmed=$true;optionsModificationTracking=$true;openCloseCommands=$true;cleanShutdown=$true;databaseIntegrity=$true;isolatedClipboardCapture=$true;recordedClipPaste=$true;keyboardInputDelivery=$false;icuRegex=$true;icuUnicodeCaseConversion=$true;visualUiInspection=$false}
 $result | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $testPath 'smoke-results.json') -Encoding utf8
 Write-Output "PASS: isolated startup, bundled module loading, open/close commands and clean shutdown. Results: $testPath"

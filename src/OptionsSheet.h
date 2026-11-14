@@ -7,7 +7,7 @@
 // OptionsSheet.h : header file
 //
 //#include "ShowTaskBarIcon.h"
-#include <set>
+#include "TrackedOptionsPage.h"
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -22,7 +22,7 @@ public:
 	COptionsSheet(LPCTSTR pszCaption, CWnd* pParentWnd = NULL, UINT iSelectPage = 0);
 
 	void SetNotifyWnd(HWND hWnd);
-	bool HasPendingChanges() const { return !m_modifiedPages.empty(); }
+	bool HasPendingChanges() const { return m_changes.Pending(); }
 
 // Attributes
 public:
@@ -45,7 +45,7 @@ public:
 
 	// Generated message map functions
 protected:
-	std::set<HWND> m_modifiedPages;
+	COptionsDirtyState m_changes;
 	virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam);
 
 	HWND m_hWndParent;
