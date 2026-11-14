@@ -22,7 +22,9 @@ To test a produced package on Windows ARM64, use the directory path printed by t
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\arm64\Test-Portable.ps1 -PackagePath 'artifacts\DittoPortable-arm64-<timestamp>'
 ```
 
-The test launches a separate copy with its own database, disables clipboard capture, receiving and global hotkeys, checks startup/module loading and open/close/exit commands, and verifies database integrity plus ICU regex/Unicode conversion. It leaves the installed Ditto instance alone. It also requires the production startup-readiness signal, then enables real capture
+The test launches a separate copy with its own database, disables clipboard capture, receiving and global hotkeys, checks startup/module loading and open/close/exit commands, and verifies database integrity plus ICU regex/Unicode conversion. It leaves the installed Ditto instance alone. It also runs real MFC property pages through the production pending-change tracker
+(initialization, edits, checkboxes, save and immediate-preference isolation), requires
+the production startup-readiness signal, then enables real capture
 in a separate window station with its own clipboard/database. It restores a stored
 Unicode clip and pastes into a native edit control. The interactive clipboard is
 untouched. Keyboard input delivery, visual inspection and broader application

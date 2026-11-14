@@ -16,21 +16,6 @@
 #include "QuickPasteKeyboard.h"
 #include "OptionsChangeTracking.h"
 
-namespace {
-// Observe changes at the page boundary, including controls whose existing
-// handlers bypass the MFC default handler. Initial population is never dirty.
-// Pushbuttons on editable pages are conservatively dirty because they can open
-// nested editors or alter lists; saving with OK also covers those changes.
-template<class Page> class CTrackedOptionsPage : public Page {
-    bool initialized = false;
-    LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) override {
-        if (initialized && IsOptionsChange(message, wParam, lParam)) this->SetModified(TRUE);
-        LRESULT result = Page::WindowProc(message, wParam, lParam);
-        if (message == WM_INITDIALOG) initialized = true;
-        return result;
-    }
-};
-}
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -157,7 +142,6 @@ void COptionsSheet::OnNcDestroy()
 
 LRESULT COptionsSheet::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
-	if (message == PSM_CHANGED) m_modifiedPages.insert(reinterpret_cast<HWND>(wParam));
-	else if (message == PSM_UNCHANGED) m_modifiedPages.erase(reinterpret_cast<HWND>(wParam));
+	m_changes.Observe(message, wParam);
 	return CPropertySheet::WindowProc(message, wParam, lParam);
 }
