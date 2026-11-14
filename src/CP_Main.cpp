@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "CP_Main.h"
+#include "update/UpdateInstall.h"
 #include "MainFrm.h"
 #include "Misc.h"
 #include ".\cp_main.h"
@@ -423,6 +424,7 @@ BOOL CCP_MainApp::InitInstance()
 	{
 		//Sleep(1000);
 		CreateMainWnd();
+		if (m_MainhWnd && ::IsWindow(m_MainhWnd)) ditto_update::SignalStartupReady();
 	}
 
 	return TRUE;

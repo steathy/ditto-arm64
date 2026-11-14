@@ -7,6 +7,19 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $root = Join-Path $repoRoot ('work/release-tests-' + [guid]::NewGuid().ToString('N'))
 $assets = Join-Path $root 'assets'
 New-Item -ItemType Directory -Path $assets -Force | Out-Null
+. "$PSScriptRoot/ReleaseText.ps1"
+$encodingFixture = Join-Path $root 'encoding.txt'
+foreach ($invalid in @([byte[]]@(0x97), [Text.Encoding]::UTF8.GetBytes([string][char]0xfffd))) {
+    [IO.File]::WriteAllBytes($encodingFixture, $invalid)
+    $rejected = $false
+    try { $null = Read-ReleaseText $encodingFixture } catch { $rejected = $true }
+    if (!$rejected) { throw 'Release text accepted malformed UTF-8 or a replacement character.' }
+}
+$unicodeFixture = 'Release ' + [char]0x2014 + ' ' + [char]0xe9
+[IO.File]::WriteAllText($encodingFixture, $unicodeFixture, (New-Object Text.UTF8Encoding($false)))
+if ((Read-ReleaseText $encodingFixture) -cne $unicodeFixture) { throw 'Valid UTF-8 did not round trip.' }
+if ((ConvertTo-UpdateNotes '# **Title** [notes](https://example.test/release)') -cne 'Title notes (https://example.test/release)') { throw 'Updater notes still contain Markdown formatting.' }
+Write-Output 'PASS: strict UTF-8, replacement-character rejection and plain-text updater notes.'
 $privateMetadata = Join-Path $assets 'metadata'
 New-Item -ItemType Directory -Path $privateMetadata | Out-Null
 $installer = "DittoSetup_$($metadata.version)_arm64.exe"
@@ -46,7 +59,15 @@ function Invoke-WebRequest {
 }
 function Invoke-RestMethod {
     param($Uri, $Headers, $Method = 'Get', $ContentType, $Body)
-    if ($Uri -like '*/releases/tags/*') { return [pscustomobject]@{draft=$global:DittoReleaseTestState.draft;prerelease=($metadata.channel -eq 'beta')} }
+    if ($Uri -like '*/releases/tags/*') { throw 'The published-tag endpoint cannot be used to discover drafts.' }
+    if ($Uri -like '*/releases?per_page=100&page=*') {
+        if ($global:DittoReleaseTestState.scenario -eq 'lookup-failure') { throw 'Simulated authenticated API failure.' }
+        if ($global:DittoReleaseTestState.scenario -eq 'new') { Write-Output -NoEnumerate @(); return }
+        if ($global:DittoReleaseTestState.scenario -eq 'draft-page-two' -and $Uri.EndsWith('page=1')) {
+            Write-Output -NoEnumerate @(1..100 | ForEach-Object { [pscustomobject]@{tag_name="old-$_";draft=$false;prerelease=$false} }); return
+        }
+        Write-Output -NoEnumerate @([pscustomobject]@{tag_name=$metadata.tag;draft=$global:DittoReleaseTestState.draft;prerelease=($metadata.channel -eq 'beta')}); return
+    }
     if ($Uri -like '*/contents/updates/arm64.json*') {
         if ($Method -eq 'Put') {
             $request = [Text.Encoding]::UTF8.GetString($Body) | ConvertFrom-Json
@@ -64,8 +85,8 @@ try {
     $env:GITHUB_ACTIONS='true'; $env:GITHUB_REPOSITORY='steathy/ditto-arm64'; $env:GITHUB_EVENT_NAME='push'
     $env:GITHUB_REF="refs/tags/$($metadata.tag)"; $env:GITHUB_SHA='a' * 40
     $env:RUNNER_TEMP=$root; $env:GITHUB_STEP_SUMMARY=Join-Path $root 'summary.md'; $env:GH_TOKEN='local-fixture'
-    foreach ($scenario in @('draft','published','older','equal','different-hash','corrupt-remote','corrupt-public','extra-remote')) {
-        $global:DittoReleaseTestState = @{commands=@();writes=0;draft=($scenario -eq 'draft');corruptRemote=($scenario -eq 'corrupt-remote');corruptPublic=($scenario -eq 'corrupt-public');extraRemote=($scenario -eq 'extra-remote')}
+    foreach ($scenario in @('new','draft','draft-page-two','lookup-failure','published','older','equal','different-hash','corrupt-remote','corrupt-public','extra-remote')) {
+        $global:DittoReleaseTestState = @{scenario=$scenario;commands=@();writes=0;draft=($scenario -in @('draft','draft-page-two'));corruptRemote=($scenario -eq 'corrupt-remote');corruptPublic=($scenario -eq 'corrupt-public');extraRemote=($scenario -eq 'extra-remote')}
         $global:DittoReleaseTestState.feed = '{"schemaVersion":2,"appId":"steathy.ditto-arm64","platform":"windows","architecture":"arm64","channels":{"stable":null,"beta":null}}' | ConvertFrom-Json
         $other = if ($metadata.channel -eq 'beta') { 'stable' } else { 'beta' }
         $global:DittoReleaseTestState.feed.channels.$other = [pscustomobject]@{version='0.0.0.1';marker='preserve-other-channel'}
@@ -78,16 +99,19 @@ try {
         $caught = $null
         try { & "$PSScriptRoot/Publish-GitHubRelease.ps1" -AssetPath $assets -Tag $metadata.tag | Out-Null }
         catch { $caught = $_.Exception.Message }
-        $expectedFailure = $scenario -in @('different-hash','corrupt-remote','corrupt-public','extra-remote')
+        $expectedFailure = $scenario -in @('lookup-failure','different-hash','corrupt-remote','corrupt-public','extra-remote')
         if ([bool]$caught -ne $expectedFailure) { throw "Unexpected result in ${scenario}: $caught" }
-        $expectedWrites = if ($scenario -in @('draft','published')) { 1 } else { 0 }
+        $expectedWrites = if ($scenario -in @('new','draft','draft-page-two','published')) { 1 } else { 0 }
         if ($global:DittoReleaseTestState.writes -ne $expectedWrites) { throw "Wrong feed write count: $scenario" }
         if ($global:DittoReleaseTestState.feed.channels.$other.marker -ne 'preserve-other-channel') { throw 'Other channel was overwritten.' }
-        if (!$global:DittoReleaseTestState.draft -and ($global:DittoReleaseTestState.commands -match '^release (upload|edit|create) ')) { throw 'Published release was mutated.' }
+        if (!$global:DittoReleaseTestState.draft -and $scenario -ne 'new' -and ($global:DittoReleaseTestState.commands -match '^release (upload|edit|create) ')) { throw 'Published release was mutated.' }
+        if ($scenario -like 'draft*' -and !($global:DittoReleaseTestState.commands -match '^release upload ')) { throw 'Draft was not repaired.' }
+        if ($scenario -like 'draft*' -and ($global:DittoReleaseTestState.commands -match '^release create ')) { throw 'Draft repair tried to create a duplicate release.' }
+        if ($scenario -eq 'lookup-failure' -and $global:DittoReleaseTestState.commands.Count) { throw 'API failure caused a publication attempt.' }
         if ($scenario -eq 'corrupt-remote' -and ($global:DittoReleaseTestState.commands -match '^release edit ')) { throw 'Corrupt download was published.' }
         Write-Output "PASS: publication scenario $scenario"
     }
 } finally {
     foreach ($name in $environmentNames) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
 }
-Write-Output 'PASS: release-tag validation and eight offline publication scenarios, including private metadata exclusion. No network calls or installers executed.'
+Write-Output 'PASS: release-tag validation and eleven offline publication scenarios, including paginated draft repair and private metadata exclusion. No network calls or installers executed.'

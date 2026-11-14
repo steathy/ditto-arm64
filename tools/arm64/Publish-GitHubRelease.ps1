@@ -39,10 +39,19 @@ function Test-Checksums([string]$Directory) {
 Test-Checksums $AssetPath
 $headers = @{Authorization="Bearer $env:GH_TOKEN";Accept='application/vnd.github+json';'X-GitHub-Api-Version'='2022-11-28'}
 $api = "https://api.github.com/repos/$repository"
-try { $release = Invoke-RestMethod "$api/releases/tags/$Tag" -Headers $headers }
-catch {
-    if ([int]$_.Exception.Response.StatusCode -ne 404) { throw }
-    $release = $null
+# Draft-aware lookup; never treat a network/authentication failure as absence.
+$release = $null
+for ($page = 1; ; $page++) {
+    # The authenticated list includes drafts. The tag endpoint does not.
+    # Assign directly: Invoke-RestMethod writes a JSON array as ONE pipeline
+    # object; wrapping the command in @() would hide its length and pagination.
+    $releases = Invoke-RestMethod "$api/releases?per_page=100&page=$page" -Headers $headers
+    foreach ($candidate in $releases) {
+        if ($candidate.tag_name -cne $Tag) { continue }
+        if ($release) { throw 'Multiple releases have this tag; resolve the ambiguity before publishing.' }
+        $release = $candidate
+    }
+    if ($releases.Count -lt 100) { break }
 }
 $assets = @($publicNames | ForEach-Object { Join-Path $AssetPath $_ })
 if (!$release) {

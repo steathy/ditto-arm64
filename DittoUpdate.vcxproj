@@ -13,7 +13,7 @@
     <ClCompile><WarningLevel>Level4</WarningLevel><LanguageStandard>stdcpp17</LanguageStandard><RuntimeLibrary>MultiThreaded</RuntimeLibrary><PreprocessorDefinitions>UNICODE;_UNICODE;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions><ExceptionHandling>Sync</ExceptionHandling><Optimization>MaxSpeed</Optimization></ClCompile>
     <Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link>
   </ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="src\update\UpdateHelper.cpp"/><ClCompile Include="src\update\UpdateModel.cpp"/><ClCompile Include="src\update\UpdateWindows.cpp"/></ItemGroup>
+  <ItemGroup><ClCompile Include="src\update\UpdateHelper.cpp"/><ClCompile Include="src\update\UpdateModel.cpp"/><ClCompile Include="src\update\UpdateWindows.cpp"/><ClCompile Include="src\update\UpdateInstall.cpp"/></ItemGroup>
   <ItemGroup><ResourceCompile Include="src\update\UpdateHelper.rc"/></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

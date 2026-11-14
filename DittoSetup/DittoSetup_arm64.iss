@@ -32,7 +32,7 @@ UsePreviousAppDir=yes
 UsePreviousTasks=yes
 DisableProgramGroupPage=yes
 DirExistsWarning=no
-UninstallLogMode=overwrite
+UninstallLogMode=append
 UninstallDisplayName=Ditto (Windows ARM64)
 UninstallDisplayIcon={app}\Ditto.exe
 VersionInfoDescription=Ditto ARM64 {#BuildType} installer
@@ -111,6 +111,10 @@ Filename: {app}\Ditto.exe; Description: Launch Ditto; Flags: nowait postinstall 
 [Registry]
 ; Preserve all Ditto preferences, including the user's language and custom keys.
 ; Uninstall deliberately retains HKCU\Software\Ditto and the user's database.
+Root: HKCU; Subkey: Software\Ditto; ValueType: string; ValueName: LanguageFile; ValueData: "{code:AdjustedLanguage}"; Flags: createvalueifdoesntexist
+Root: HKCU; Subkey: Software\Ditto\PasteStrings; ValueType: string; ValueName: gvim.exe; ValueData: """{{PLUS}gP"; Flags: createvalueifdoesntexist
+Root: HKCU; Subkey: Software\Ditto\CopyStrings; ValueType: string; ValueName: gvim.exe; ValueData: """{{PLUS}y"; Flags: createvalueifdoesntexist
+Root: HKCU; Subkey: Software\Ditto\CutStrings; ValueType: string; ValueName: gvim.exe; ValueData: """{{PLUS}x"; Flags: createvalueifdoesntexist
 Root: HKCU; Subkey: SOFTWARE\Microsoft\Windows\CurrentVersion\Run; ValueType: string; ValueName: Ditto; ValueData: """{app}\Ditto.exe"""; Tasks: RunAtStartup; Flags: createvalueifdoesntexist uninsdeletevalue
 Root: HKCR; Subkey: .dto; ValueType: string; ValueData: Ditto; Flags: uninsdeletevalue
 Root: HKCR; Subkey: Ditto; ValueType: string; ValueData: Ditto; Flags: uninsdeletekey
@@ -118,6 +122,30 @@ Root: HKCR; Subkey: Ditto\DefaultIcon; ValueType: string; ValueData: {app}\Ditto
 Root: HKCR; Subkey: Ditto\shell\open\command; ValueType: string; ValueData: """{app}\Ditto.exe"" ""%1"""
 
 [Code]
+function AdjustedLanguage(Param: String): String;
+begin
+  Result := ActiveLanguage;
+  if Result = 'German' then Result := 'Deutsch'
+  else if Result = 'Italiano' then Result := 'Italian'
+  else if Result = 'Polish' then Result := 'Polski'
+  else if (Result = 'Portuguese_Brazil') or (Result = 'Portuguese_Portugal') then Result := 'Portuguese'
+  else if Result = 'Simplified_Chinese' then Result := 'Chinese Simplified'
+  else if Result = 'Traditional_Chinese' then Result := 'Chinese Traditional';
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
+begin
+  { The installed helper asks for separate, default-No consent and removes only
+    the current user's confined update cache. Silent uninstall keeps backups. }
+  if (CurUninstallStep = usUninstall) and not UninstallSilent then
+    if FileExists(ExpandConstant('{app}\DittoUpdate.exe')) then
+      if not Exec(ExpandConstant('{app}\DittoUpdate.exe'), '--clear-cache', '',
+        SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode) then
+        Log('Update backups were retained because the cleanup helper could not start.');
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;

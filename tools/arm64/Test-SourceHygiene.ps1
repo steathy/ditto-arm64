@@ -5,6 +5,8 @@ if (!$ReportPath) { $ReportPath = Join-Path $repoRoot 'work\source-hygiene.json'
 $files = @(& git -C $repoRoot ls-files)
 if ($LASTEXITCODE -or !$files.Count) { throw 'Stage the intended source files before running this audit.' }
 $issues = [Collections.Generic.List[object]]::new()
+. "$PSScriptRoot/ReleaseText.ps1"
+$legacyEncodings = Get-Content (Join-Path $repoRoot 'build/legacy-text-encodings.json') -Raw | ConvertFrom-Json
 $forbiddenExtension = '(?i)\.(exe|dll|lib|obj|pdb|pfx|p12|pem|key|cer|crt|zip|7z|db|sqlite3?|reg|dmp|user|suo|aps|plg|binlog|log)$'
 $patterns = [ordered]@{
     userDirectory = '(?i)[A-Z]:[/\\]+(?:Users|Documents and Settings)[/\\]+'
@@ -27,6 +29,19 @@ foreach ($relative in $files) {
         continue
     }
     if ($relative -match $binaryAssets) { continue }
+    try { $null = Read-ReleaseText (Join-Path $repoRoot $relative) }
+    catch {
+        $bytes = [IO.File]::ReadAllBytes((Join-Path $repoRoot $relative))
+        # Normalize checkout line endings without decoding legacy bytes.
+        $latin = [Text.Encoding]::GetEncoding(28591)
+        $normalized = $latin.GetBytes($latin.GetString($bytes).Replace("`r`n", "`n"))
+        $hasher = [Security.Cryptography.SHA256]::Create()
+        try { $hash = [BitConverter]::ToString($hasher.ComputeHash($normalized)).Replace('-','').ToLowerInvariant() }
+        finally { $hasher.Dispose() }
+        if (!$legacyEncodings.PSObject.Properties[$relative] -or $legacyEncodings.$relative -ne $hash) {
+            $issues.Add([pscustomobject]@{file=$relative;category='invalid-utf8-or-replacement-character'})
+        }
+    }
     $content = [IO.File]::ReadAllText((Join-Path $repoRoot $relative))
     foreach ($pattern in $patterns.GetEnumerator()) {
         if ([regex]::IsMatch($content,$pattern.Value)) {

@@ -46,6 +46,8 @@ jobs:
           if ($env:RELEASE_TAG) {
             git merge-base --is-ancestor HEAD "origin/$($metadata.releaseBranch)"
             if ($LASTEXITCODE) { throw 'Release tag must point to a commit on its declared release branch.' }
+            git diff --quiet origin/main HEAD -- .github/workflows
+            if ($LASTEXITCODE) { throw 'Release workflows differ from main. Synchronize the shared workflow on both channels before tagging; GITHUB_TOKEN cannot grant workflow-write permission.' }
           }
       - name: Audit tracked source
         run: ./tools/arm64/Test-SourceHygiene.ps1

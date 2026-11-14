@@ -22,6 +22,9 @@ struct Error : std::runtime_error {
 };
 struct Cancelled : Error { Cancelled() : Error("Update cancelled.") {} };
 std::wstring Wide(const std::string& text);
+// Error messages may come from the Windows ANSI code page. Never use this
+// best-effort decoder for feed content, paths, signatures or other protocol data.
+std::wstring DiagnosticText(const char* text) noexcept;
 std::string Utf8(const std::wstring& text);
 
 // A deliberately limited JSON grammar for the versioned update schema: objects,
@@ -49,6 +52,7 @@ enum class Channel { Stable, Beta };
 const char* ChannelKey(Channel channel);
 const wchar_t* BuildLabel(Channel channel);
 Channel ParseChannel(const std::string& channel);
+bool IncludeBetaUpdates(int savedPreference, bool nightlyBuild);
 struct Release {
     Channel channel = Channel::Stable;
     Version version;
@@ -73,6 +77,12 @@ public:
     virtual void Get(const std::wstring& url, bool manifest, uint64_t limit,
         const Sink& sink, const std::atomic_bool& cancel) = 0;
 };
+struct TransientNetworkError : Error { using Error::Error; };
+// Each attempt starts from byte zero; reset discards any incomplete response.
+void GetWithRetry(Transport& transport, const std::wstring& url, bool manifest,
+    uint64_t limit, const Sink& sink, const std::function<void()>& reset,
+    const std::atomic_bool& cancel,
+    const std::function<void(unsigned, const std::atomic_bool&)>& delay = {});
 class HttpTransport : public Transport {
 public:
     void Get(const std::wstring& url, bool manifest, uint64_t limit,

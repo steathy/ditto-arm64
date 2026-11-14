@@ -11,6 +11,7 @@
 #include <aclapi.h>
 #include <winternl.h>
 #include "UpdateCore.h"
+#include "UpdateInstall.h"
 #include "TrustedPublishers.h"
 #include <algorithm>
 #include <filesystem>
@@ -24,6 +25,7 @@
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "version.lib")
+#pragma comment(lib, "user32.lib")
 
 namespace ditto_update {
 namespace fs = std::filesystem;
@@ -121,6 +123,18 @@ std::wstring Wide(const std::string& text) {
     MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), out.data(), n);
     return out;
 }
+std::wstring DiagnosticText(const char* text) noexcept {
+    try {
+        if (!text) return {};
+        int size = static_cast<int>(strlen(text));
+        UINT page = CP_UTF8;
+        int n = MultiByteToWideChar(page, MB_ERR_INVALID_CHARS, text, size, nullptr, 0);
+        if (!n) { page = CP_ACP; n = MultiByteToWideChar(page, 0, text, size, nullptr, 0); }
+        std::wstring result(n, L'\0');
+        if (n) MultiByteToWideChar(page, 0, text, size, result.data(), n);
+        return result;
+    } catch (...) { return {}; }
+}
 std::string Utf8(const std::wstring& text) {
     if (text.empty()) return {};
     int n = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
@@ -152,9 +166,18 @@ void HttpTransport::Get(const std::wstring& initial, bool manifest, uint64_t lim
         DWORD logon = WINHTTP_AUTOLOGON_SECURITY_LEVEL_HIGH;
         WinCheck(WinHttpSetOption(request.h, WINHTTP_OPTION_AUTOLOGON_POLICY, &logon, sizeof(logon)), "Could not restrict network authentication");
         const wchar_t* headers = L"Cache-Control: no-cache\r\nPragma: no-cache\r\nAccept-Encoding: identity\r\n";
-        WinCheck(WinHttpSendRequest(request.h, headers, static_cast<DWORD>(-1), WINHTTP_NO_REQUEST_DATA, 0, 0, 0), "Could not contact the update server");
+        auto networkCheck = [](BOOL ok, const char* operation) {
+            if (ok) return;
+            DWORD code = GetLastError();
+            std::string message = std::string(operation) + " (Windows error " + std::to_string(code) + ").";
+            if (code == ERROR_WINHTTP_TIMEOUT || code == ERROR_WINHTTP_CANNOT_CONNECT ||
+                code == ERROR_WINHTTP_CONNECTION_ERROR || code == ERROR_WINHTTP_NAME_NOT_RESOLVED ||
+                code == ERROR_WINHTTP_RESEND_REQUEST) throw TransientNetworkError(message);
+            throw Error(message); // TLS/certificate/authentication failures are never retried.
+        };
+        networkCheck(WinHttpSendRequest(request.h, headers, static_cast<DWORD>(-1), WINHTTP_NO_REQUEST_DATA, 0, 0, 0), "Could not contact the update server");
         CheckCancelled(cancel);
-        WinCheck(WinHttpReceiveResponse(request.h, nullptr), "Could not receive update response");
+        networkCheck(WinHttpReceiveResponse(request.h, nullptr), "Could not receive update response");
         DWORD status = 0, statusSize = sizeof(status);
         WinCheck(WinHttpQueryHeaders(request.h, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &status, &statusSize, WINHTTP_NO_HEADER_INDEX), "Could not read HTTP status");
         if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
@@ -162,6 +185,8 @@ void HttpTransport::Get(const std::wstring& initial, bool manifest, uint64_t lim
             url = Header(request.h, WINHTTP_QUERY_LOCATION); continue;
         }
         if (status == 404) throw Error(manifest ? "Update feed is not published yet (HTTP 404)." : "The installer is no longer available (HTTP 404).");
+        if (status == 408 || status == 500 || status == 502 || status == 503 || status == 504)
+            throw TransientNetworkError("Update server temporarily unavailable (HTTP " + std::to_string(status) + ").");
         if (status == 403 || status == 429) throw Error("GitHub refused or rate-limited this request. Please try again later.");
         if (status != 200) throw Error("Update server returned HTTP " + std::to_string(status) + ".");
         auto encoding = Header(request.h, WINHTTP_QUERY_CONTENT_ENCODING);
@@ -172,7 +197,7 @@ void HttpTransport::Get(const std::wstring& initial, bool manifest, uint64_t lim
             CheckCancelled(cancel);
             if (GetTickCount64() > deadline) throw Error("Update request timed out.");
             DWORD read = 0;
-            WinCheck(WinHttpReadData(request.h, buffer, sizeof(buffer), &read), "Update download was interrupted");
+            networkCheck(WinHttpReadData(request.h, buffer, sizeof(buffer), &read), "Update download was interrupted");
             if (!read) break;
             if (total > limit || read > limit - total) throw Error("Update response exceeds the expected size.");
             total += read; sink(buffer, read);
@@ -180,6 +205,23 @@ void HttpTransport::Get(const std::wstring& initial, bool manifest, uint64_t lim
         CheckCancelled(cancel); return;
     }
     throw Error("Too many update redirects.");
+}
+void GetWithRetry(Transport& transport, const std::wstring& url, bool manifest,
+    uint64_t limit, const Sink& sink, const std::function<void()>& reset,
+    const std::atomic_bool& cancel,
+    const std::function<void(unsigned, const std::atomic_bool&)>& delay) {
+    for (unsigned attempt = 0; ; ++attempt) {
+        CheckCancelled(cancel); reset();
+        try { transport.Get(url, manifest, limit, sink, cancel); return; }
+        catch (const TransientNetworkError&) {
+            if (attempt == 2) throw;
+            unsigned milliseconds = 1000u << attempt;
+            if (delay) delay(milliseconds, cancel);
+            else for (unsigned waited = 0; waited < milliseconds; waited += 50) {
+                CheckCancelled(cancel); Sleep(50);
+            }
+        }
+    }
 }
 std::string HashBytes(const unsigned char* bytes, size_t size) { Hash hash; hash.Add(bytes, size); return hash.Finish(); }
 std::wstring FileApiPath(const std::wstring& path) {
@@ -439,11 +481,11 @@ void CheckAndDownload(Session& session, const CheckOptions& options, Transport& 
     try {
         session.Set(Phase::Checking, L"Checking for ARM64 updates...");
         std::string bytes;
-        transport.Get(FeedUrl, true, MaxManifestBytes, [&](const unsigned char* data, size_t size) {
+        GetWithRetry(transport, FeedUrl, true, MaxManifestBytes, [&](const unsigned char* data, size_t size) {
             CheckCancelled(session.cancel);
             if (size > MaxManifestBytes - bytes.size()) throw Error("Update feed is too large.");
             bytes.append(reinterpret_cast<const char*>(data), size);
-        }, session.cancel);
+        }, [&] { bytes.clear(); }, session.cancel);
         CheckCancelled(session.cancel);
         auto manifest = ParseManifest(bytes, options.includeBeta);
         if (!manifest.hasRelease) { session.Set(Phase::NoRelease, options.includeBeta
@@ -452,10 +494,18 @@ void CheckAndDownload(Session& session, const CheckOptions& options, Transport& 
         const auto& r = manifest.release;
         { std::lock_guard<std::mutex> lock(session.mutex); session.state.release = r; }
         if (r.version == options.installed) { session.Set(Phase::Current, L"No newer version is available for your update preference."); return; }
-        if (r.version < options.installed) { session.Set(Phase::NewerInstalled, L"Your installed build is newer than the latest offer. No downgrade will be installed."); return; }
+        if (r.version < options.installed) {
+            auto beta = ParseManifest(bytes, true);
+            bool newerBeta = !options.includeBeta && beta.hasRelease && options.installed < beta.release.version;
+            session.Set(Phase::NewerInstalled, newerBeta
+                ? L"A newer nightly build is available. Select Include beta updates (Nightly Builds) to download it. Your current preference checks stable releases only."
+                : L"Your installed build is newer than the latest offer for your update preference. No downgrade will be installed."); return;
+        }
         if (r.minimumWindowsBuild > options.windowsBuild) { session.Set(Phase::Unsupported, L"This update needs a newer version of Windows."); return; }
         if (!options.installedMode) { session.Set(Phase::Unsupported, L"Update available. Automatic installation supports regular installed builds only; use release notes for other distributions."); return; }
         EnsurePrivateDirectory(options.cacheRoot);
+        auto lease = AcquireCacheLease(options.cacheRoot);
+        try { PruneUpdateCache(options.cacheRoot); } catch (...) { /* Retention cannot block a check. */ }
         auto highest = HighestVersionPath(options.cacheRoot, r.channel);
         if (Exists(highest) && r.version < Version::Parse(ReadSmallFile(highest))) throw Error("The feed offered an older version than a previously verified update.");
         auto directory = options.cacheRoot + L"\\" + Wide(std::string(ChannelKey(r.channel)) + "-" + r.version.String() + "-" + r.sha256);
@@ -471,11 +521,16 @@ void CheckAndDownload(Session& session, const CheckOptions& options, Transport& 
                 auto output = OwnHandle(CreateFileW(FileApiPath(partial).c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
                 session.Set(Phase::Downloading, L"Downloading Ditto ARM64 " + Wide(r.version.String()) + L"...");
                 uint64_t received = 0;
-                transport.Get(r.url, false, r.size, [&](const unsigned char* data, size_t size) {
+                GetWithRetry(transport, r.url, false, r.size, [&](const unsigned char* data, size_t size) {
                     CheckCancelled(session.cancel);
                     if (size > r.size - received) throw Error("Installer is larger than the feed declares.");
                     WriteAll(output.get(), data, size); received += size;
                     std::lock_guard<std::mutex> lock(session.mutex); session.state.downloaded = received;
+                }, [&] {
+                    LARGE_INTEGER beginning{};
+                    WinCheck(SetFilePointerEx(output.get(), beginning, nullptr, FILE_BEGIN) && SetEndOfFile(output.get()), "Could not reset an interrupted download");
+                    received = 0;
+                    std::lock_guard<std::mutex> lock(session.mutex); session.state.downloaded = 0;
                 }, session.cancel);
                 if (received != r.size) throw Error("Installer download is incomplete.");
                 WinCheck(FlushFileBuffers(output.get()), "Could not save the downloaded installer");
@@ -489,8 +544,9 @@ void CheckAndDownload(Session& session, const CheckOptions& options, Transport& 
             session.Set(Phase::Verifying, L"Rechecking the cached installer hash and signature...");
             verification = verifier.Verify(target, r, session.cancel);
         }
-        auto manifestPath = directory + L"\\release-" + UniqueName() + L".json";
-        WriteNewFile(manifestPath, bytes);
+        auto manifestPath = directory + L"\\release-" + Wide(HashBytes(reinterpret_cast<const unsigned char*>(bytes.data()), bytes.size())) + L".json";
+        if (!Exists(manifestPath)) WriteNewFile(manifestPath, bytes);
+        else if (ReadSmallFile(manifestPath) != bytes) throw Error("Cached release metadata was changed.");
         if (verification.installerSignature == SignatureStatus::Unknown) throw Error("Installer verification did not complete.");
         verification.requiresUnsignedConsent = verification.requiresUnsignedConsent || verification.installerSignature == SignatureStatus::Unsigned;
         // An unsigned offer has not authenticated its publisher. Merely checking
@@ -500,13 +556,16 @@ void CheckAndDownload(Session& session, const CheckOptions& options, Transport& 
         { std::lock_guard<std::mutex> lock(session.mutex); session.state.installerPath = target; session.state.manifestPath = manifestPath; session.state.downloaded = r.size; session.state.verification = verification; }
         session.Set(Phase::Ready, L"Download checked and ready. Choose Install now to review and continue.");
     } catch (const Cancelled&) { session.Set(Phase::Cancelled, L"Update cancelled. Ditto is still running."); }
-    catch (const std::exception& error) { session.Set(Phase::Failed, session.cancel.load() ? L"Update cancelled. Ditto is still running." : Wide(error.what())); }
+    catch (const std::exception& error) { session.Set(Phase::Failed, session.cancel.load() ? L"Update cancelled. Ditto is still running." : DiagnosticText(error.what())); }
+    catch (...) { session.Set(Phase::Failed, L"An unexpected update error occurred. Ditto is still running."); }
     if (!partial.empty()) DeleteFileW(FileApiPath(partial).c_str());
 }
 void StartCheck(const std::shared_ptr<Session>& session, const CheckOptions& options) {
     std::thread([session, options] { HttpTransport transport; WindowsVerifier verifier(options.executable); CheckAndDownload(*session, options, transport, verifier); }).detach();
 }
 void LaunchInstallHelper(const Snapshot& ready, const std::wstring& executable, const std::wstring& database, uint32_t parentPid, uintptr_t mainWindow, bool unsignedConsent) {
+    if (!mainWindow || !IsWindow(reinterpret_cast<HWND>(mainWindow))) throw Error("Open a working Ditto database before installing an update.");
+    auto lease = AcquireCacheLease(PrivateCacheRoot());
     if (ready.phase != Phase::Ready) throw Error("The update is not ready to install.");
     RequireUnsignedConsent(ready.verification.installerSignature, unsignedConsent);
     if (ready.verification.requiresUnsignedConsent && !unsignedConsent) throw Error("Unsigned installation has not been approved.");
@@ -527,6 +586,7 @@ void LaunchInstallHelper(const Snapshot& ready, const std::wstring& executable, 
     // This is a GUI helper with no console. Its first error dialog must be visible.
     STARTUPINFOW startup{}; startup.cb = sizeof(startup); startup.dwFlags = STARTF_USESHOWWINDOW; startup.wShowWindow = SW_SHOWNORMAL;
     PROCESS_INFORMATION process{};
+    lease.reset(); // The separate helper acquires its own lease before consuming the ticket.
     WinCheck(CreateProcessW(helper.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr, directory.c_str(), &startup, &process), "Could not start the update helper");
     CloseHandle(process.hThread);
     auto helperProcess = OwnHandle(process.hProcess);

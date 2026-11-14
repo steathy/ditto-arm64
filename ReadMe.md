@@ -11,8 +11,8 @@ plus subsequent `master` changes, pinned to commit
 [`a80fd35`](https://github.com/sabrogden/Ditto/commit/a80fd3536bc407cac8cce43b5682022282ace983)
 (September 30, 2026; upstream tag `build-number-146`).
 
-**This branch's ARM64 build:** `3.25.146.10` — **Nightly Build**
-(upstream nightly build 146, ARM64 revision 10).
+**This branch's ARM64 build:** `3.25.146.11` - **Nightly Build**
+(upstream nightly build 146, ARM64 revision 11).
 Project and updates: [steathy/ditto-arm64](https://github.com/steathy/ditto-arm64).
 
 | Download | ARM64 version | Upstream baseline |
@@ -46,13 +46,16 @@ release. See the [original project](https://github.com/sabrogden/Ditto) and its
 - Native ARM64 build configuration, dependencies and installer packaging.
 - About-page builder credits, links to both projects, and corrected button layout.
 - A manual **Check Update** workflow using this fork's JSON feed, with one latest
-  stable release and one latest beta release. Stable is the default; **Include beta
-  updates (Nightly Builds)** opts into the newest of both. The workflow shows version,
+  stable release and one latest beta release. An unset preference follows the build
+  channel; saved choices are preserved. **Include beta updates (Nightly Builds)**
+  selects the newest of both. The workflow shows version,
   release notes, download progress, SHA-256/signature verification, and an
   installation prompt. Unsigned releases require an explicit warning/confirmation;
   incorrect hashes and invalid signatures are blocked. Installation uses a separate helper for backup,
   graceful shutdown, Windows elevation and restart, followed by a success dialog.
-  Launch errors are reported visibly and recorded in a local update log.
+  Launch errors are reported visibly and recorded in a local update log. Unsaved
+  Options edits block installation. Backups have a retention policy; old unclassified
+  backups require explicit removal. Transient download failures are retried safely.
 
 The port retains Ditto's existing clipboard capture, history, search and paste
 features; it does not intentionally redesign their core behavior. Compatibility

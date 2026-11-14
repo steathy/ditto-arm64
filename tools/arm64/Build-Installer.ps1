@@ -41,7 +41,7 @@ $compileLog = Join-Path $OutputDirectory 'compile.log'
 $savedErrorPreference = $ErrorActionPreference
 try {
     $ErrorActionPreference = 'Continue'
-    & $IsccPath "/DPackagePath=$PackagePath" "/DBuildLabel=$label" "/DBuildType=$buildType" "/O$OutputDirectory" (Join-Path $repoRoot 'DittoSetup\DittoSetup_ARM64.iss') *> $compileLog
+    & $IsccPath "/DPackagePath=$PackagePath" "/DBuildLabel=$label" "/DBuildType=$buildType" "/O$OutputDirectory" (Join-Path $repoRoot 'DittoSetup\DittoSetup_arm64.iss') *> $compileLog
     $compileExitCode = $LASTEXITCODE
 } finally { $ErrorActionPreference = $savedErrorPreference }
 if ($compileExitCode) { throw "Inno Setup compilation failed. See $compileLog" }
