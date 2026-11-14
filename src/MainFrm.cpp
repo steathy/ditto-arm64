@@ -17,6 +17,7 @@
 #include "OptionsSheet.h"
 #include "DeleteClipData.h"
 #include "DatabaseUtilities.h"
+#include "update/UpdateInstall.h"
 
 #ifdef _DEBUG
     #define new DEBUG_NEW
@@ -29,6 +30,7 @@
 #define WM_TRAYNOTIFY WM_USER + 100
 	
 IMPLEMENT_DYNAMIC(CMainFrame, CFrameWnd)
+static UINT WM_ARM64_UPDATE_SHUTDOWN = ditto_update::UpdateShutdownMessage();
 
 BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	//{{AFX_MSG_MAP(CMainFrame)
@@ -45,6 +47,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_SHOW_TRAY_ICON, OnShowTrayIcon)
 	ON_MESSAGE(WM_CLIPBOARD_COPIED, OnClipboardCopied)
 	ON_WM_CLOSE()
+	ON_REGISTERED_MESSAGE(WM_ARM64_UPDATE_SHUTDOWN, OnUpdateShutdown)
 	ON_MESSAGE(WM_ADD_TO_DATABASE_FROM_SOCKET, OnAddToDatabaseFromSocket)
 	ON_MESSAGE(WM_SEND_RECIEVE_ERROR, OnErrorOnSendRecieve)
 	ON_MESSAGE(WM_SHOW_ERROR_MSG, OnErrorMsg)
@@ -953,6 +956,16 @@ BOOL CMainFrame::PreTranslateMessage(MSG *pMsg)
 	}
 
     return CFrameWnd::PreTranslateMessage(pMsg);
+}
+
+LRESULT CMainFrame::OnUpdateShutdown(WPARAM helperPid, LPARAM)
+{
+	const HWND window = m_hWnd;
+	ditto_update::HandleUpdateShutdown(static_cast<uint32_t>(helperPid), [this, window] {
+		OnClose();
+		return !::IsWindow(window);
+	});
+	return 0;
 }
 
 void CMainFrame::OnClose()

@@ -39,7 +39,7 @@ int main() {
         editable.GetDlgItem(1002)->SendMessage(BM_CLICK);
         Check(sheet.changes.Pending(), "real checkbox notification must block installation until saved");
         sheet.DestroyWindow();
-        std::puts("PASS: production Options page tracking: initialization stays clean, real edits/checkboxes mark dirty, saving clears dirty, immediate preferences stay independent.");
+        std::puts("PASS: two-control MFC fixture using the production tracking wrapper: initialization stays clean, edits/checkboxes mark dirty, saving clears dirty, immediate preferences stay independent. This fixture does not instantiate Ditto's own pages.");
         return 0;
     } catch (const std::exception& error) { std::fprintf(stderr, "%s\n", error.what()); return 1; }
 }

@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <algorithm>
 #include <cwctype>
+#include <sstream>
+#include <iomanip>
 
 namespace ditto_update {
 namespace fs = std::filesystem;
@@ -14,6 +16,9 @@ std::shared_ptr<void> Own(HANDLE handle) {
     return {handle, [](void* p) { CloseHandle(p); }};
 }
 std::wstring ReadyEvent(DWORD pid) { return L"Local\\DittoARM64-StartupReady-" + std::to_wstring(pid); }
+enum CloseState : LONG { Pending, Closing, Refused, Withdrawn };
+struct SharedClose { volatile LONG state; DWORD targetPid; };
+std::wstring CloseName(DWORD pid) { return L"Local\\DittoARM64-Shutdown-" + std::to_wstring(pid); }
 std::vector<std::shared_ptr<void>> PinCacheRoot(const std::wstring& root) {
     RejectReparsePath(root);
     std::vector<std::shared_ptr<void>> pinned; fs::path current;
@@ -44,11 +49,18 @@ void RemoveConfined(const fs::path& root, const fs::path& target) {
     FILE_ATTRIBUTE_TAG_INFO attributes{};
     if (!GetFileInformationByHandleEx(file.get(), FileAttributeTagInfo, &attributes, sizeof(attributes)) ||
         (attributes.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) throw Error("Cleanup cannot remove a link or junction.");
-    if (attributes.FileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-        for (const auto& child : fs::directory_iterator(target)) RemoveConfined(root, child.path());
-    FILE_DISPOSITION_INFO disposition{TRUE};
-    if (!SetFileInformationByHandle(file.get(), FileDispositionInfo, &disposition, sizeof(disposition)))
-        throw Error("An update cache file is still in use; it has been retained.");
+    if (attributes.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+        std::vector<fs::path> children;
+        for (const auto& child : fs::directory_iterator(target)) children.push_back(child.path());
+        // Once a backup is selected for deletion, remove its sensitive data first.
+        std::stable_sort(children.begin(), children.end(), [](const auto& a, const auto& b) {
+            return a.filename() == L"database" && b.filename() != L"database";
+        });
+        for (const auto& child : children) RemoveConfined(root, child);
+    }
+    FILE_DISPOSITION_INFO_EX disposition{FILE_DISPOSITION_FLAG_DELETE | FILE_DISPOSITION_FLAG_IGNORE_READONLY_ATTRIBUTE};
+    if (!SetFileInformationByHandle(file.get(), FileDispositionInfoEx, &disposition, sizeof(disposition)))
+        throw Error("Cannot delete this update-cache item (Windows error " + std::to_string(GetLastError()) + ").");
 }
 bool GuidName(const std::wstring& name, const std::wstring& prefix) {
     if (name.rfind(prefix, 0) != 0) return false;
@@ -68,6 +80,30 @@ bool CacheName(const std::wstring& name) {
         return std::all_of(rest.begin() + dash + 1, rest.end(), [](wchar_t c) { return (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f'); });
     }
     return false;
+}
+bool ManagedName(const std::wstring& name) {
+    return GuidName(name, L"backup-") || GuidName(name, L"install-") || CacheName(name);
+}
+CleanupResult RemoveEntries(const fs::path& root, const std::vector<fs::path>& paths) {
+    CleanupResult result;
+    for (const auto& path : paths) {
+        try { RemoveConfined(root, path); ++result.removed; }
+        catch (const std::exception& error) { result.retained.push_back(path.wstring() + L": " + DiagnosticText(error.what())); }
+    }
+    return result;
+}
+uint64_t MeasureConfined(const fs::path& path) {
+    RejectReparsePath(path.wstring());
+    auto file = Own(CreateFileW(FileApiPath(path.wstring()).c_str(), FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+    BY_HANDLE_FILE_INFORMATION info{};
+    if (!GetFileInformationByHandle(file.get(), &info) || (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+        throw Error("Cannot inspect a link or inaccessible update-cache item.");
+    if (!(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) return (uint64_t(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
+    uint64_t bytes = 0;
+    for (const auto& child : fs::directory_iterator(path)) bytes += MeasureConfined(child.path());
+    return bytes;
 }
 void CopyLocked(const std::wstring& source, const std::wstring& target) {
     auto lock = LockFile(source);
@@ -90,14 +126,18 @@ InstallResult RunInstallTransaction(const InstallActions& actions) {
     bool stopped = false;
     try {
         actions.close();
-        if (!actions.waitForExit(30000)) {
-            // WM_CLOSE cannot be recalled. Keep monitoring instead of abandoning
-            // the process and allowing a late exit to strand the user.
-            actions.waiting();
-            if (!actions.waitForExit(INFINITE)) throw Error("Could not monitor Ditto shutdown.");
+        while (!actions.waitForExit(30000)) {
+            if (!actions.waiting()) {
+                result.cancelled = true;
+                // Neutralize a queued close, or finish monitoring an already
+                // committed shutdown. Cancellation can never reach Setup.
+                if (actions.cancelClose()) { actions.restart(); result.recovered = true; }
+                return result;
+            }
         }
         stopped = true;
-        actions.backup(); actions.install(); actions.verify();
+        actions.backup(); actions.install(); result.installed = true;
+        actions.verify(); result.verified = true;
         // Once a restart has been attempted, do not launch a second instance if
         // its readiness signal times out. The diagnostic tells the user to check it.
         stopped = false; actions.restart(); result.success = true;
@@ -115,6 +155,47 @@ InstallResult RunInstallTransaction(const InstallActions& actions) {
         if (stopped && !result.recovered) result.error += L"\n\nDitto could not be restarted. Open it from the Start menu.";
     }
     return result;
+}
+uint32_t UpdateShutdownMessage() {
+    static UINT message = RegisterWindowMessageW(L"DittoARM64.CancelableShutdown.v1");
+    return message;
+}
+ShutdownRequest::ShutdownRequest(uint32_t targetPid) {
+    HANDLE raw = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, sizeof(SharedClose), CloseName(GetCurrentProcessId()).c_str());
+    DWORD error = GetLastError(); mapping = Own(raw);
+    if (error == ERROR_ALREADY_EXISTS) throw Error("An update shutdown request already exists.");
+    auto memory = MapViewOfFile(raw, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(SharedClose));
+    if (!memory) throw Error("Cannot prepare a cancellable Ditto shutdown.");
+    view = {memory, [](void* p) { UnmapViewOfFile(p); }};
+    auto state = static_cast<SharedClose*>(view.get()); state->targetPid = targetPid;
+    InterlockedExchange(&state->state, Pending);
+}
+void ShutdownRequest::Post(uintptr_t window) {
+    if (!UpdateShutdownMessage() || !PostMessageW(reinterpret_cast<HWND>(window), UpdateShutdownMessage(), GetCurrentProcessId(), 0))
+        throw Error("Ditto could not be asked to close cleanly.");
+}
+bool ShutdownRequest::Cancel() {
+    auto state = static_cast<SharedClose*>(view.get());
+    LONG value = InterlockedCompareExchange(&state->state, Withdrawn, Pending);
+    if (value == Refused) value = InterlockedCompareExchange(&state->state, Withdrawn, Refused);
+    return value == Pending || value == Refused || value == Withdrawn;
+}
+void ShutdownRequest::Retry(uintptr_t window) {
+    auto state = static_cast<SharedClose*>(view.get());
+    if (InterlockedCompareExchange(&state->state, Pending, Refused) == Refused) Post(window);
+}
+void HandleUpdateShutdown(uint32_t helperPid, const std::function<bool()>& close) {
+    // Missing/withdrawn requests are ignored, including messages left in a queue
+    // after a cancelled helper exits. Never fall back to an unconditional WM_CLOSE.
+    HANDLE raw = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, CloseName(helperPid).c_str());
+    if (!raw) return;
+    auto mapping = Own(raw); auto memory = MapViewOfFile(raw, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(SharedClose));
+    if (!memory) return;
+    std::shared_ptr<void> view(memory, [](void* p) { UnmapViewOfFile(p); });
+    auto state = static_cast<SharedClose*>(memory);
+    if (state->targetPid != GetCurrentProcessId() || InterlockedCompareExchange(&state->state, Closing, Pending) != Pending) return;
+    try { if (!close()) InterlockedExchange(&state->state, Refused); }
+    catch (...) { InterlockedExchange(&state->state, Refused); throw; }
 }
 void SignalStartupReady() noexcept {
     try {
@@ -174,12 +255,12 @@ std::shared_ptr<void> AcquireCacheLease(const std::wstring& root) {
     return {raw, [mutex](void* p) { ReleaseMutex(p); }};
 }
 void MarkBackupSuccessful(const std::wstring& directory) { WriteNewFile(directory + L"\\update-successful", "1"); }
-void PruneUpdateCache(const std::wstring& rootText, const std::wstring& activeInstall) {
+CleanupResult PruneUpdateCache(const std::wstring& rootText, const std::wstring& activeInstall) {
     RejectReparsePath(rootText);
-    if (!fs::exists(rootText)) return;
+    if (!fs::exists(rootText)) return {};
     fs::path root(rootText);
     auto pinned = PinCacheRoot(rootText);
-    std::vector<fs::path> successful, failed, expired;
+    std::vector<fs::path> successful, legacy, expired;
     auto now = fs::file_time_type::clock::now();
     for (const auto& entry : fs::directory_iterator(root)) {
         auto path = entry.path(); auto name = path.filename().wstring();
@@ -191,36 +272,84 @@ void PruneUpdateCache(const std::wstring& rootText, const std::wstring& activeIn
                 auto ok = path / L"update-successful", bad = path / L"update-failed";
                 RejectReparsePath(ok.wstring()); RejectReparsePath(bad.wstring());
                 if (fs::is_regular_file(ok)) successful.push_back(path);
-                else if (fs::is_regular_file(bad)) failed.push_back(path);
-                // Legacy/unclassified backups need an explicit deletion decision.
+                else if (fs::is_regular_file(bad)) expired.push_back(path);
+                else legacy.push_back(path);
             } else if ((CacheName(name) || GuidName(name, L"install-")) &&
                 now - entry.last_write_time() > std::chrono::hours(24 * 7)) expired.push_back(path);
         } catch (...) { /* Unknown or locked items are retained. */ }
     }
     auto retainTwo = [&](std::vector<fs::path>& paths, const wchar_t* marker) {
-        std::sort(paths.begin(), paths.end(), [&](const auto& a, const auto& b) { return fs::last_write_time(a / marker) > fs::last_write_time(b / marker); });
+        std::sort(paths.begin(), paths.end(), [&](const auto& a, const auto& b) {
+            auto left = fs::last_write_time(*marker ? a / marker : a), right = fs::last_write_time(*marker ? b / marker : b);
+            return left != right ? left > right : a.native() > b.native();
+        });
         for (size_t i = 2; i < paths.size(); ++i) expired.push_back(paths[i]);
     };
     retainTwo(successful, L"update-successful");
-    // Failed attempts remain recoverable until a later successful installation.
-    if (!successful.empty()) retainTwo(failed, L"update-failed");
-    for (const auto& path : expired) { try { RemoveConfined(root, path); } catch (...) {} }
+    retainTwo(legacy, L"");
+    return RemoveEntries(root, expired);
 }
-void RemoveUpdateCache(const std::wstring& rootText) {
+CleanupResult RemoveUpdateCache(const std::wstring& rootText) {
     RejectReparsePath(rootText);
-    if (!fs::exists(rootText)) return;
+    if (!fs::exists(rootText)) return {};
     auto lease = AcquireCacheLease(rootText);
     fs::path root(rootText);
     auto pinned = PinCacheRoot(rootText);
     std::vector<fs::path> paths;
     for (const auto& entry : fs::directory_iterator(root)) {
         const auto name = entry.path().filename().wstring();
-        if (GuidName(name, L"backup-") || GuidName(name, L"install-") || CacheName(name)) {
-            RejectReparsePath(entry.path().wstring()); paths.push_back(entry.path());
-        }
+        if (ManagedName(name)) paths.push_back(entry.path());
     }
-    for (const auto& path : paths) RemoveConfined(root, path);
     // Preserve accepted-version records; deleting backups must not reset rollback protection.
+    return RemoveEntries(root, paths);
+}
+CacheInventory InspectUpdateCache(const std::wstring& rootText) {
+    CacheInventory result; RejectReparsePath(rootText);
+    if (!fs::exists(rootText)) return result;
+    auto lease = AcquireCacheLease(rootText); auto pinned = PinCacheRoot(rootText);
+    for (const auto& entry : fs::directory_iterator(rootText)) {
+        const auto path = entry.path(); auto name = path.filename().wstring();
+        if (!ManagedName(name)) continue;
+        try {
+            RejectReparsePath(path.wstring());
+            if (GuidName(name, L"backup-")) {
+                RejectReparsePath((path / L"update-successful").wstring()); RejectReparsePath((path / L"update-failed").wstring());
+                if (fs::is_regular_file(path / L"update-successful")) ++result.successful;
+                else if (fs::is_regular_file(path / L"update-failed")) ++result.failed;
+                else ++result.legacy;
+            } else ++result.downloads;
+            result.bytes += MeasureConfined(path);
+        } catch (const std::exception& error) { result.unreadable.push_back(path.wstring() + L": " + DiagnosticText(error.what())); }
+    }
+    return result;
+}
+void ManageUpdateCache(uintptr_t owner, bool uninstall) {
+    // A different administrator, or a session with no identifiable shell, must
+    // not receive a misleading offer to clean the desktop user's profile.
+    if (uninstall && !IsCurrentInteractiveUser()) return;
+    auto root = UpdateCachePath(); auto inventory = InspectUpdateCache(root);
+    auto window = reinterpret_cast<HWND>(owner);
+    if (inventory.Empty() && inventory.unreadable.empty()) {
+        if (!uninstall) MessageBoxW(window, L"There are no update backups or downloaded installers to remove.", L"Manage update files", MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    std::wostringstream prompt;
+    prompt << L"Update files in:\n" << root << L"\n\nSuccessful-update backups: " << inventory.successful
+        << L"\nLegacy backups: " << inventory.legacy << L"\nFailed-attempt backups awaiting cleanup: " << inventory.failed
+        << L"\nInstaller/helper folders: " << inventory.downloads << L"\nReadable size: " << std::fixed << std::setprecision(1)
+        << inventory.bytes / 1048576.0 << L" MB\n\nKeep policy: two successful-update backups and two legacy backups; no failed-attempt backups."
+        << L"\n\nDelete all these backups and downloaded installers now? Backups can contain clipboard history. This cannot be undone."
+        << L"\n\nYour live database, settings and update rollback-protection records will be kept.";
+    if (!inventory.unreadable.empty()) prompt << L"\n\nSome items could not be inspected. Cleanup will report any items it cannot remove.";
+    if (MessageBoxW(window, prompt.str().c_str(), L"Manage update files", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) return;
+    auto result = RemoveUpdateCache(root);
+    std::wstring message = std::to_wstring(result.removed) + L" update-cache folders removed.";
+    if (result.retained.empty()) message += L"\n\nYour live database, settings and rollback-protection records were kept.";
+    else {
+        message += L"\n\nSome items remain (a folder may have been partially cleaned):";
+        for (const auto& item : result.retained) message += L"\n\n" + item;
+    }
+    MessageBoxW(window, message.c_str(), L"Update-file cleanup", MB_OK | (result.retained.empty() ? MB_ICONINFORMATION : MB_ICONWARNING));
 }
 void BackupInstallation(const std::wstring& application, const std::wstring& database,
     const std::wstring& directory, const std::wstring& startup,

@@ -32,7 +32,9 @@ UsePreviousAppDir=yes
 UsePreviousTasks=yes
 DisableProgramGroupPage=yes
 DirExistsWarning=no
-UninstallLogMode=append
+; Discard inherited upstream uninsdeletekey records for HKCU\Software\Ditto.
+; Known obsolete payload files are handled explicitly below.
+UninstallLogMode=overwrite
 UninstallDisplayName=Ditto (Windows ARM64)
 UninstallDisplayIcon={app}\Ditto.exe
 VersionInfoDescription=Ditto ARM64 {#BuildType} installer
@@ -105,6 +107,10 @@ Source: {#PackagePath}\build-info.json; DestDir: {app}; DestName: arm64-build-in
 Name: {group}\Ditto; Filename: {app}\Ditto.exe
 Name: {group}\Uninstall; Filename: {uninstallexe}
 
+[InstallDelete]
+; Not shipped or imported by either ARM64 payload. Never glob user content.
+Type: files; Name: {app}\vcruntime140_1.dll
+
 [Run]
 Filename: {app}\Ditto.exe; Description: Launch Ditto; Flags: nowait postinstall skipifsilent runasoriginaluser
 
@@ -128,7 +134,15 @@ begin
   if Result = 'German' then Result := 'Deutsch'
   else if Result = 'Italiano' then Result := 'Italian'
   else if Result = 'Polish' then Result := 'Polski'
-  else if (Result = 'Portuguese_Brazil') or (Result = 'Portuguese_Portugal') then Result := 'Portuguese'
+  else if Result = 'Portuguese_Brazil' then
+  begin
+    #if FileExists(PackagePath + "\Language\Portuguese (Brazil).xml")
+      Result := 'Portuguese (Brazil)';
+    #else
+      Result := 'Portuguese';
+    #endif
+  end
+  else if Result = 'Portuguese_Portugal' then Result := 'Portuguese'
   else if Result = 'Simplified_Chinese' then Result := 'Chinese Simplified'
   else if Result = 'Traditional_Chinese' then Result := 'Chinese Traditional';
 end;
@@ -137,12 +151,13 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   ResultCode: Integer;
 begin
-  { The installed helper asks for separate, default-No consent and removes only
-    the current user's confined update cache. Silent uninstall keeps backups. }
+  { The helper offers cleanup only when its account matches the interactive
+    desktop user and an existing cache contains managed files. It never scans
+    other profiles. About provides normal-user cleanup before uninstall. }
   if (CurUninstallStep = usUninstall) and not UninstallSilent then
     if FileExists(ExpandConstant('{app}\DittoUpdate.exe')) then
-      if not Exec(ExpandConstant('{app}\DittoUpdate.exe'), '--clear-cache', '',
-        SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode) then
+      if not Exec(ExpandConstant('{app}\DittoUpdate.exe'), '--clear-cache --uninstall', '',
+        SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
         Log('Update backups were retained because the cleanup helper could not start.');
 end;
 

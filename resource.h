@@ -659,6 +659,7 @@
 #define IDC_UPDATE_INCLUDE_BETA         2184
 #define IDC_ARM64_REPOSITORY_NAME       2185
 #define IDC_UPSTREAM_REPOSITORY_NAME    2186
+#define IDC_MANAGE_UPDATE_FILES         2187
 #define IDC_EDIT_ADV_FILTER             5001
 #define IDC_NEXT_MATCH_BUTTON           5002
 #define ID_FIRST_OPTION                 32771
@@ -887,7 +888,7 @@
 #define _APS_3D_CONTROLS                     1
 #define _APS_NEXT_RESOURCE_VALUE        394
 #define _APS_NEXT_COMMAND_VALUE         32998
-#define _APS_NEXT_CONTROL_VALUE         2187
+#define _APS_NEXT_CONTROL_VALUE         2188
 #define _APS_NEXT_SYMED_VALUE           104
 #endif
 #endif

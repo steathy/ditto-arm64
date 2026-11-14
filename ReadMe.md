@@ -10,8 +10,8 @@ with or endorsed by the original Ditto project or its maintainers.
 the official stable release, pinned to commit
 [`81a667c`](https://github.com/sabrogden/Ditto/commit/81a667c790f5a6c9b6b63f187eb75e79bf159670).
 
-**This branch's ARM64 build:** `3.25.113.3` — **Stable Build**
-(upstream stable 3.25.113.0, ARM64 revision 3).
+**This branch's ARM64 build:** `3.25.113.4` — **Stable Build** (maintenance candidate)
+(upstream stable 3.25.113.0, ARM64 revision 4).
 Project and updates: [steathy/ditto-arm64](https://github.com/steathy/ditto-arm64).
 
 | Download | ARM64 version | Upstream baseline |

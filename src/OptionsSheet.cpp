@@ -143,5 +143,13 @@ void COptionsSheet::OnNcDestroy()
 LRESULT COptionsSheet::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
 	m_changes.Observe(message, wParam);
-	return CPropertySheet::WindowProc(message, wParam, lParam);
+	// Publish the same state used by the install guard as window metadata. Native
+	// integration tests can observe real pages without reading process memory.
+	if (message == PSM_CHANGED || message == PSM_UNCHANGED)
+		::SetProp(m_hWnd, _T("Ditto.Options.ChangeState"), reinterpret_cast<HANDLE>(m_changes.Pending() ? 2 : 1));
+	if (message == WM_NCDESTROY) ::RemoveProp(m_hWnd, _T("Ditto.Options.ChangeState"));
+	LRESULT result = CPropertySheet::WindowProc(message, wParam, lParam);
+	if (message == WM_INITDIALOG)
+		::SetProp(m_hWnd, _T("Ditto.Options.ChangeState"), reinterpret_cast<HANDLE>(m_changes.Pending() ? 2 : 1));
+	return result;
 }

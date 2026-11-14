@@ -402,12 +402,35 @@ void EnsurePrivateDirectory(const std::wstring& path) {
     WinCheck(GetSecurityDescriptorDacl(descriptor, &present, &acl, &defaulted), "Could not secure update cache");
     if (SetNamedSecurityInfoW(native.data(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, nullptr, nullptr, acl, nullptr) != ERROR_SUCCESS) throw Error("Could not secure update cache permissions.");
 }
-std::wstring PrivateCacheRoot() {
+std::wstring UpdateCachePath() {
     wchar_t* local = nullptr;
     if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &local))) throw Error("Could not find the local update cache.");
     std::wstring path = std::wstring(local) + L"\\DittoARM64-Updates"; CoTaskMemFree(local);
     if (path.rfind(L"\\\\", 0) == 0) throw Error("Updates require a local cache directory.");
-    EnsurePrivateDirectory(path); return path;
+    return path;
+}
+std::wstring PrivateCacheRoot() {
+    auto path = UpdateCachePath(); EnsurePrivateDirectory(path); return path;
+}
+bool IsCurrentInteractiveUser() {
+    // Uninstall may run under a different administrator's credentials. Never
+    // mistake that administrator's profile for the desktop user's update cache.
+    DWORD pid = 0; GetWindowThreadProcessId(GetShellWindow(), &pid);
+    if (!pid) return false;
+    try {
+        auto shell = OwnHandle(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid));
+        auto user = [](HANDLE process) {
+            HANDLE raw = nullptr; WinCheck(OpenProcessToken(process, TOKEN_QUERY, &raw), "Cannot identify cache owner");
+            auto token = OwnHandle(raw); DWORD size = 0;
+            GetTokenInformation(token.get(), TokenUser, nullptr, 0, &size);
+            std::vector<unsigned char> data(size);
+            WinCheck(GetTokenInformation(token.get(), TokenUser, data.data(), size, &size), "Cannot identify cache owner");
+            return data;
+        };
+        auto current = user(GetCurrentProcess()), desktop = user(shell.get());
+        return EqualSid(reinterpret_cast<TOKEN_USER*>(current.data())->User.Sid,
+            reinterpret_cast<TOKEN_USER*>(desktop.data())->User.Sid) != FALSE;
+    } catch (...) { return false; }
 }
 std::wstring UniqueName() {
     GUID id; if (FAILED(CoCreateGuid(&id))) throw Error("Could not create a unique update name.");
@@ -592,7 +615,8 @@ void LaunchInstallHelper(const Snapshot& ready, const std::wstring& executable, 
     auto helperProcess = OwnHandle(process.hProcess);
     WaitForSingleObject(helperProcess.get(), INFINITE);
     DWORD exitCode = 1;
-    if (!GetExitCodeProcess(helperProcess.get(), &exitCode) || exitCode != 0)
+    if (GetExitCodeProcess(helperProcess.get(), &exitCode) && exitCode == ERROR_CANCELLED) throw Cancelled();
+    if (exitCode != 0)
         throw Error("The update helper could not finish. Ditto has been left running; see the helper's error message.");
 }
 } // namespace ditto_update

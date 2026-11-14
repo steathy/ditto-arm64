@@ -67,6 +67,8 @@ jobs:
           $process = Start-Process $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/CURRENTUSER',('/DIR="{0}"' -f $destination)) -WindowStyle Hidden -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "Inno Setup installation failed: $($process.ExitCode)" }
           if (!(Test-Path "$destination/ISCC.exe")) { throw 'Inno Setup compiler is missing.' }
+      - name: Test installer migration and uninstall policy
+        run: ./tools/arm64/Test-InstallerPolicy.ps1
       - name: Build Release ARM64
         run: ./tools/arm64/Build-Arm64.ps1 -Configuration Release
       - name: Run native updater checks
@@ -97,6 +99,7 @@ jobs:
             work/update-test-*/*.log
             work/portable-test-*/*.log
             work/portable-test-*/smoke-results.json
+            work/installer-policy-*/*/*.log
             artifacts/installer/compile.log
           if-no-files-found: ignore
           retention-days: 7
