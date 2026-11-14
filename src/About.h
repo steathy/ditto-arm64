@@ -37,6 +37,7 @@ public:
 	CEdit m_ReleaseNotesText;
 	CButton m_InstallUpdate;
 	CButton m_IncludeBeta;
+	CButton m_ManageUpdateFiles;
 	//}}AFX_DATA
 
 
@@ -66,6 +67,7 @@ protected:
 	virtual BOOL OnInitDialog();
 	afx_msg void OnCheckUpdate();
 	afx_msg void OnInstallUpdate();
+	afx_msg void OnManageUpdateFiles();
 	afx_msg void OnUpdateChannelChanged();
 	afx_msg void OnTimer(UINT_PTR eventId);
 	afx_msg void OnDestroy();

@@ -130,6 +130,7 @@ protected:
 DECLARE_MESSAGE_MAP()public:
     virtual BOOL PreTranslateMessage(MSG *pMsg);
     afx_msg void OnClose();
+    afx_msg LRESULT OnUpdateShutdown(WPARAM helperPid, LPARAM);
     afx_msg void OnFirstImport();
     afx_msg void OnDestroy();
     afx_msg void OnFirstNewclip();

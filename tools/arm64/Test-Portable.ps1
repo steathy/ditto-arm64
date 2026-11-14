@@ -1,8 +1,21 @@
-param([Parameter(Mandatory=$true)][string]$PackagePath, [string]$VisualStudioPath)
+param([Parameter(Mandatory=$true)][string]$PackagePath, [string]$VisualStudioPath, [string]$UpdaterProbePath)
 $ErrorActionPreference = 'Stop'
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $PackagePath = (Resolve-Path -LiteralPath $PackagePath).Path
 if (!(Test-Path -LiteralPath (Join-Path $PackagePath 'build-info.json'))) { throw 'Use a package created by Package-Portable.ps1.' }
+# Check this dependency before copying a package or starting any process.
+if (!$UpdaterProbePath) {
+    $pointer = Join-Path $repoRoot 'work/last-updater-probe.txt'
+    if (!(Test-Path -LiteralPath $pointer)) { throw 'Run tools/arm64/Test-Updater.ps1 first, or pass -UpdaterProbePath to its current update_probe.exe.' }
+    $UpdaterProbePath = [IO.File]::ReadAllText($pointer).Trim()
+}
+if (!(Test-Path -LiteralPath $UpdaterProbePath -PathType Leaf)) { throw 'Updater probe is missing. Run tools/arm64/Test-Updater.ps1 again.' }
+$probe = (Resolve-Path -LiteralPath $UpdaterProbePath).Path
+$probeTime = (Get-Item -LiteralPath $probe).LastWriteTimeUtc
+$probeSources = @('src/update/UpdateCore.h','src/update/UpdateInstall.h','src/update/UpdateModel.cpp','src/update/UpdateWindows.cpp','src/update/UpdateInstall.cpp','tools/arm64/probes/update_probe.cpp','tools/arm64/probes/update_maintenance_probe.h')
+foreach ($source in $probeSources) {
+    if ((Get-Item -LiteralPath (Join-Path $repoRoot $source)).LastWriteTimeUtc -gt $probeTime) { throw 'Updater probe predates its source. Run tools/arm64/Test-Updater.ps1 again.' }
+}
 if (!$VisualStudioPath) {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     $VisualStudioPath = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
@@ -10,13 +23,22 @@ if (!$VisualStudioPath) {
 if (!(Get-CimInstance Win32_Processor | Where-Object Architecture -eq 12)) { throw 'Runtime smoke tests require Windows on ARM64.' }
 $sqliteObject = Join-Path $repoRoot 'ARM64\Release\obj\sqlite3mc_amalgamation.obj'
 if (!(Test-Path -LiteralPath $sqliteObject)) { throw 'Build Release ARM64 before running the database integration probe.' }
+function Read-DittoStartup {
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run')
+    try {
+        $present = $null -ne $key -and 'Ditto' -in $key.GetValueNames()
+        if ($present) { return [pscustomobject]@{present=$true;value=$key.GetValue('Ditto',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames);kind=$key.GetValueKind('Ditto')} }
+        return [pscustomobject]@{present=$false;value=$null;kind=$null}
+    } finally { if ($key) { $key.Dispose() } }
+}
+$startupBefore = Read-DittoStartup
+try {
 $testPath = Join-Path $repoRoot ('work\portable-test-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path $testPath | Out-Null
 Copy-Item -Path (Join-Path $PackagePath '*') -Destination $testPath -Recurse
 $database = Join-Path $testPath 'test.db'
 @('[Ditto]','ConnectedToClipboard=0','DisableRecieve=1','DittoHotKey=0','DittoHotKey2=0','DittoHotKey3=0','EnableDebugLogging=0','CheckForUpdates=0',"DBPath3=$database") | Set-Content -LiteralPath (Join-Path $testPath 'Ditto.Settings') -Encoding Unicode
 $executable = Join-Path $testPath 'Ditto.exe'
-$probe = [IO.File]::ReadAllText((Join-Path $repoRoot 'work/last-updater-probe.txt'))
 & $probe --restart-check $executable
 if ($LASTEXITCODE) { throw 'The production restart/readiness check failed.' }
 $process = @(Get-Process Ditto -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $executable })
@@ -73,14 +95,38 @@ try {
     if (!$optionsProbe.WaitForExit(20000)) { Stop-Process -Id $optionsProbe.Id; throw 'Options probe timed out.' }
     if ($optionsProbe.ExitCode) { Get-Content options-errors.log; throw 'Options modification tracking failed.' }
     Get-Content options-run.log
-    & cl.exe /nologo /std:c++17 /MD /O2 /W4 /DUNICODE /D_UNICODE "/I$repoRoot\src\sqlite" "$PSScriptRoot\probes\clipboard_probe.cpp" $sqliteObject /Fe:clipboard_probe.exe *> clipboard-build.log
+    & cl.exe /nologo /std:c++17 /EHsc /MD /O2 /W4 /DUNICODE /D_UNICODE /D_WIN32_WINNT=0x0A00 "/I$repoRoot\src\sqlite" "$PSScriptRoot\probes\clipboard_probe.cpp" "$repoRoot\src\update\UpdateModel.cpp" "$repoRoot\src\update\UpdateWindows.cpp" "$repoRoot\src\update\UpdateInstall.cpp" $sqliteObject /Fe:clipboard_probe.exe *> clipboard-build.log
     if ($LASTEXITCODE) { throw "Clipboard probe compilation failed. See $testPath\clipboard-build.log" }
     $captureDatabase = Join-Path $testPath 'capture.db'
-    @('[Ditto]','ConnectedToClipboard=1','DisableRecieve=1','DittoHotKey=0','DittoHotKey2=0','DittoHotKey3=0','EnableDebugLogging=0','CheckForUpdates=0',"DBPath3=$captureDatabase") | Set-Content -LiteralPath (Join-Path $testPath 'Ditto.Settings') -Encoding Unicode
-    & .\clipboard_probe.exe $executable $captureDatabase *> clipboard-run.log
-    if ($LASTEXITCODE) { Get-Content clipboard-run.log; throw "Clipboard capture/paste probe failed. See $testPath\clipboard-run.log" }
+    @('[Ditto]','ConnectedToClipboard=1','DisableRecieve=1','AllowFriends=1','LanguageFile=English','DittoHotKey=0','DittoHotKey2=0','DittoHotKey3=0','EnableDebugLogging=0','CheckForUpdates=0',"DBPath3=$captureDatabase") | Set-Content -LiteralPath (Join-Path $testPath 'Ditto.Settings') -Encoding Unicode
+    $clipboardProbe = Start-Process -FilePath (Join-Path $testPath 'clipboard_probe.exe') -ArgumentList @(('"{0}"' -f $executable),('"{0}"' -f $captureDatabase)) -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $testPath 'clipboard-run.log') -RedirectStandardError (Join-Path $testPath 'clipboard-errors.log')
+    if (!$clipboardProbe.WaitForExit(90000)) { Stop-Process -Id $clipboardProbe.Id; throw 'Clipboard/Options integration probe timed out.' }
+    if ($clipboardProbe.ExitCode) { Get-Content clipboard-run.log,clipboard-errors.log; throw "Clipboard/Options integration probe failed (exit $($clipboardProbe.ExitCode)). See $testPath\clipboard-run.log" }
     Get-Content clipboard-run.log
 } finally { Pop-Location }
-$result = [ordered]@{passed=$true;package=$PackagePath;testDirectory=$testPath;loadedFromPackage=$loaded;startup=$true;startupReadinessConfirmed=$true;optionsModificationTracking=$true;openCloseCommands=$true;cleanShutdown=$true;databaseIntegrity=$true;isolatedClipboardCapture=$true;recordedClipPaste=$true;keyboardInputDelivery=$false;icuRegex=$true;icuUnicodeCaseConversion=$true;visualUiInspection=$false}
+$result = [ordered]@{passed=$true;package=$PackagePath;testDirectory=$testPath;loadedFromPackage=$loaded;startup=$true;startupReadinessConfirmed=$true;optionsTrackingFixture=$true;realEditableOptionsPages=6;optionsPagesInitialized=8;realOptionsCancelReopen=$true;realOptionsSaving=$false;updateShutdownProtocol=$true;openCloseCommands=$true;cleanShutdown=$true;databaseIntegrity=$true;isolatedClipboardCapture=$true;recordedClipPaste=$true;keyboardInputDelivery=$false;icuRegex=$true;icuUnicodeCaseConversion=$true;visualUiInspection=$false}
 $result | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $testPath 'smoke-results.json') -Encoding utf8
 Write-Output "PASS: isolated startup, bundled module loading, open/close commands and clean shutdown. Results: $testPath"
+} finally {
+    # A crashed test driver cannot run its native destructor. Clean up only the
+    # exact fixture executable under this repository's work directory.
+    if ($executable -and [IO.Path]::GetFullPath($executable).StartsWith((Join-Path $repoRoot 'work') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        Get-Process Ditto -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $executable } | Stop-Process
+    }
+    $startupAfter = Read-DittoStartup
+    if (($startupBefore | ConvertTo-Json -Compress) -cne ($startupAfter | ConvertTo-Json -Compress)) {
+        # Only undo a write demonstrably made by this fixture, never an unrelated
+        # concurrent user change. Do not print the user's startup command.
+        if ($startupAfter.present -and $startupAfter.value -ceq $executable) {
+            $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run',$true)
+            try {
+                if ($startupBefore.present) { $key.SetValue('Ditto',$startupBefore.value,$startupBefore.kind) }
+                else { $key.DeleteValue('Ditto',$false) }
+            } finally { $key.Dispose() }
+            if (((Read-DittoStartup) | ConvertTo-Json -Compress) -cne ($startupBefore | ConvertTo-Json -Compress)) { throw 'Fixture startup restoration failed.' }
+            throw 'A fixture changed startup registration; the original value was restored. Do not accept this test run.'
+        }
+        throw 'Startup registration changed during the test; the unrelated change was left untouched.'
+    }
+    Write-Output 'PASS: Windows startup registration unchanged.'
+}

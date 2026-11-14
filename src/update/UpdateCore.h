@@ -120,6 +120,9 @@ void VerifyPublisher(void* handle, const std::wstring& path,
 std::string HashBytes(const unsigned char* data, size_t size);
 Version FileVersion(const std::wstring& path);
 std::wstring PrivateCacheRoot();
+// Resolves the current account's path without creating a folder or changing ACLs.
+std::wstring UpdateCachePath();
+bool IsCurrentInteractiveUser();
 void EnsurePrivateDirectory(const std::wstring& path);
 void RejectReparsePath(const std::wstring& path);
 std::wstring FileApiPath(const std::wstring& path);

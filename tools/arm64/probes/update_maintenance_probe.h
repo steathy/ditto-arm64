@@ -2,6 +2,7 @@
 #include "../../../src/update/UpdateInstall.h"
 #include "../../../src/OptionsChangeTracking.h"
 #include <thread>
+#include <algorithm>
 
 namespace {
 void MaintenanceChecks(const std::wstring& root) {
@@ -13,8 +14,9 @@ void MaintenanceChecks(const std::wstring& root) {
         std::string calls; int waits = 0, starts = 0;
         InstallActions actions;
         actions.close = [&] { calls += 'c'; if (fault == 1) throw Error("close failed"); };
-        actions.waitForExit = [&](uint32_t timeout) { ++waits; calls += 'w'; return fault != 6 || timeout == INFINITE; };
-        actions.waiting = [&] { calls += 'p'; };
+        actions.waitForExit = [&](uint32_t) { ++waits; calls += 'w'; return fault != 6 || waits == 2; };
+        actions.waiting = [&] { calls += 'p'; return true; };
+        actions.cancelClose = [] { return false; };
         actions.backup = [&] { calls += 'b'; if (fault == 2) throw std::runtime_error("backup caf\xe9 failed"); };
         actions.install = [&] { calls += 'i'; if (fault == 3) throw Error("UAC cancelled"); };
         actions.verify = [&] { calls += 'v'; if (fault == 4) throw Error("installed version differs"); };
@@ -24,11 +26,13 @@ void MaintenanceChecks(const std::wstring& root) {
         Require(starts == (fault == 1 ? 0 : 1), "closed application recovers exactly once");
         if (fault == 2) Require(calls == "cwbr" && result.recovered && !result.error.empty(), "backup failure recovers before displaying non-UTF8 error");
         if (fault == 3 || fault == 4) Require(result.recovered, "cancelled or failed installation restarts Ditto");
+        if (fault == 4) Require(result.installed && !result.verified, "completed Setup is distinct from failed installed-file verification");
+        if (fault == 5) Require(result.installed && result.verified && !result.success, "verified installation is distinct from unconfirmed startup");
         if (fault == 6) Require(waits == 2 && calls == "cwpwbivr", "late shutdown stays monitored until install/restart finishes");
     }
     {
         InstallActions actions;
-        actions.close = [] {}; actions.waitForExit = [](uint32_t) { return true; }; actions.waiting = [] {};
+        actions.close = [] {}; actions.waitForExit = [](uint32_t) { return true; }; actions.waiting = [] { return true; };
         actions.backup = [] { throw 42; }; actions.install = actions.verify = [] {};
         bool restarted = false; actions.restart = [&] { restarted = true; };
         auto result = RunInstallTransaction(actions);
@@ -97,19 +101,85 @@ void MaintenanceChecks(const std::wstring& root) {
         WriteNewFile(cache + L"\\highest-version", "3.25.113.3");
         PruneUpdateCache(cache, active);
         Require(!fs::exists(good[0]) && !fs::exists(good[1]) && fs::exists(good[2]) && fs::exists(good[3]), "retain exactly two successful backups");
-        Require(!fs::exists(bad[0]) && fs::exists(bad[2]) && fs::exists(bad[3]), "bound failed backups after successful update");
+        Require(std::none_of(bad.begin(), bad.end(), [](const auto& path) { return fs::exists(path); }), "failed-attempt backups are not retained");
         Require(fs::exists(legacy) && fs::exists(active) && !fs::exists(expired), "keep legacy/active backups; remove expired installers");
         auto outside = root + L"\\outside-cache"; EnsurePrivateDirectory(outside); WriteNewFile(outside + L"\\sentinel", "keep");
         auto link = cache + L"\\backup-" + UniqueName();
         if (!CreateSymbolicLinkW(link.c_str(), outside.c_str(), SYMBOLIC_LINK_FLAG_DIRECTORY | SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
             throw Error("Link-safety test requires Developer Mode or symbolic-link privilege.");
         PruneUpdateCache(cache, active);
-        Reject([&] { RemoveUpdateCache(cache); }, "explicit cache deletion rejects a junction/symlink");
+        auto removal = RemoveUpdateCache(cache);
+        Require(removal.retained.size() == 1 && removal.removed > 0, "explicit cleanup reports links and continues other entries");
         Require(ReadSmallFile(outside + L"\\sentinel") == "keep", "cleanup never traverses a link outside the cache");
         // Delete only the link itself; never recurse into its target.
         Require(RemoveDirectoryW(link.c_str()) != FALSE, "remove test link without touching its target");
         lease.reset(); RemoveUpdateCache(cache);
         Require(!fs::exists(legacy) && !fs::exists(active) && ReadSmallFile(cache + L"\\highest-version") == "3.25.113.3", "explicit cleanup removes history backups but keeps rollback floor");
+    }
+    for (bool lateExit : {false, true}) {
+        InstallActions actions; int installs = 0, starts = 0;
+        actions.close = [] {}; actions.waitForExit = [](uint32_t) { return false; };
+        actions.waiting = [] { return false; }; actions.cancelClose = [=] { return lateExit; };
+        actions.backup = actions.verify = [] {}; actions.install = [&] { ++installs; }; actions.restart = [&] { ++starts; };
+        auto result = RunInstallTransaction(actions);
+        Require(result.cancelled && !result.installed && installs == 0 && starts == (lateExit ? 1 : 0), "cancellation never installs and recovers a late exit exactly once");
+    }
+    {
+        ShutdownRequest close(GetCurrentProcessId()); bool called = false;
+        Require(close.Cancel(), "queued shutdown can be withdrawn");
+        HandleUpdateShutdown(GetCurrentProcessId(), [&] { called = true; return true; });
+        Require(!called, "late delivery of withdrawn shutdown never closes Ditto");
+    }
+    {
+        ShutdownRequest close(GetCurrentProcessId()); bool called = false;
+        HandleUpdateShutdown(GetCurrentProcessId(), [&] { called = true; return false; });
+        Require(called && close.Cancel(), "refused close can be cancelled without waiting for process exit");
+    }
+    {
+        ShutdownRequest close(GetCurrentProcessId()); bool called = false;
+        HandleUpdateShutdown(GetCurrentProcessId(), [&] { called = true; return true; });
+        Require(called && !close.Cancel(), "committed shutdown requires monitoring instead of abandoning recovery");
+    }
+    {
+        auto cache = root + L"\\failed-only"; EnsurePrivateDirectory(cache);
+        for (int i = 0; i < 6; ++i) {
+            auto path = cache + L"\\backup-" + UniqueName(); EnsurePrivateDirectory(path);
+            WriteNewFile(path + L"\\update-failed", "1"); WriteNewFile(path + L"\\history.db", "synthetic");
+        }
+        auto removal = PruneUpdateCache(cache);
+        Require(removal.removed == 6 && fs::is_empty(cache), "all six failed backups removed with no successful backup prerequisite");
+    }
+    {
+        auto cache = root + L"\\legacy-limit"; EnsurePrivateDirectory(cache); std::vector<std::wstring> paths;
+        for (int i = 0; i < 5; ++i) {
+            auto path = cache + L"\\backup-" + UniqueName(); EnsurePrivateDirectory(path); WriteNewFile(path + L"\\history.db", "legacy fixture");
+            fs::last_write_time(path, fs::file_time_type::clock::now() - std::chrono::hours(10 - i)); paths.push_back(path);
+        }
+        auto removal = PruneUpdateCache(cache);
+        Require(removal.removed == 3 && !fs::exists(paths[2]) && fs::exists(paths[3]) && fs::exists(paths[4]), "keep only the newest two legacy backups");
+        auto inventory = InspectUpdateCache(cache);
+        Require(inventory.legacy == 2 && inventory.bytes == 28 && inventory.successful == 0, "inventory counts legacy files and bytes without reading history contents");
+        auto absent = root + L"\\never-created";
+        Require(InspectUpdateCache(absent).Empty() && !fs::exists(absent), "inventory of absent cache never creates it");
+    }
+    {
+        auto cache = root + L"\\cleanup-errors"; EnsurePrivateDirectory(cache);
+        auto readonly = cache + L"\\backup-" + UniqueName(); EnsurePrivateDirectory(readonly); WriteNewFile(readonly + L"\\update-failed", "1");
+        WriteNewFile(readonly + L"\\readonly.txt", "synthetic");
+        Require(SetFileAttributesW((readonly + L"\\readonly.txt").c_str(), FILE_ATTRIBUTE_READONLY) != FALSE, "create read-only deletion fixture");
+        auto removal = PruneUpdateCache(cache);
+        Require(removal.removed == 1 && removal.retained.empty() && !fs::exists(readonly), "retention removes read-only backup files safely");
+        auto locked = cache + L"\\backup-" + UniqueName(); EnsurePrivateDirectory(locked);
+        EnsurePrivateDirectory(locked + L"\\database"); WriteNewFile(locked + L"\\database\\Ditto.db", "synthetic");
+        WriteNewFile(locked + L"\\locked.txt", "synthetic");
+        auto lock = LockFile(locked + L"\\locked.txt");
+        auto other = cache + L"\\backup-" + UniqueName(); EnsurePrivateDirectory(other); WriteNewFile(other + L"\\history.db", "synthetic");
+        removal = RemoveUpdateCache(cache);
+        Require(removal.retained.size() == 1 && removal.removed == 1 && !fs::exists(other), "one locked file does not abort other explicit removals");
+        Require(!fs::exists(locked + L"\\database\\Ditto.db"), "discarded backup data is deleted before a locked application file");
+        Require(removal.retained[0].find(L"Windows error") != std::wstring::npos, "cleanup identifies actual Windows failure instead of guessing its cause");
+        lock.reset(); removal = RemoveUpdateCache(cache);
+        Require(removal.retained.empty() && fs::is_empty(cache), "explicit cleanup succeeds after releasing a fixture lock");
     }
     {
         HWND edit = CreateWindowExW(0, L"EDIT", L"fixture", WS_POPUP, 0, 0, 10, 10, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);

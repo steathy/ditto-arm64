@@ -9,6 +9,7 @@
 #include "Arm64BuildInfo.h"
 #include "misc.h"
 #include "OptionsSheet.h"
+#include "update/UpdateInstall.h"
 #include <thread>
 
 #ifdef _DEBUG
@@ -51,6 +52,7 @@ void CAbout::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_UPDATE_NOTES_TEXT, m_ReleaseNotesText);
 	DDX_Control(pDX, IDC_INSTALL_UPDATE, m_InstallUpdate);
 	DDX_Control(pDX, IDC_UPDATE_INCLUDE_BETA, m_IncludeBeta);
+	DDX_Control(pDX, IDC_MANAGE_UPDATE_FILES, m_ManageUpdateFiles);
 	//}}AFX_DATA_MAP
 }
 
@@ -59,6 +61,7 @@ BEGIN_MESSAGE_MAP(CAbout, CPropertyPage)
 	//{{AFX_MSG_MAP(CAbout)
 	ON_BN_CLICKED(IDC_CHECK_UPDATE, OnCheckUpdate)
 	ON_BN_CLICKED(IDC_INSTALL_UPDATE, OnInstallUpdate)
+	ON_BN_CLICKED(IDC_MANAGE_UPDATE_FILES, OnManageUpdateFiles)
 	ON_BN_CLICKED(IDC_UPDATE_INCLUDE_BETA, OnUpdateChannelChanged)
 	ON_WM_TIMER()
 	ON_WM_DESTROY()
@@ -270,6 +273,9 @@ void CAbout::LayoutControls()
 	place(m_CheckUpdate, button);
 	button.OffsetRect(button.Width() + margin, 0); place(m_InstallUpdate, button);
 	if (m_InstallToolTip.GetSafeHwnd()) m_InstallToolTip.SetToolRect(this, IDC_INSTALL_UPDATE, button);
+	CRect manageSize(0, 0, 112, 16); MapDialogRect(manageSize);
+	button.OffsetRect(button.Width() + margin, 0); button.right = button.left + manageSize.Width();
+	place(m_ManageUpdateFiles, button);
 	if (moved) Invalidate(TRUE);
 }
 
@@ -290,6 +296,7 @@ void CAbout::RefreshUpdate()
 	m_CheckUpdate.EnableWindow(!installing && !(busy && m_update->cancel.load()));
 	m_InstallUpdate.EnableWindow(state.phase == Phase::Ready);
 	m_IncludeBeta.EnableWindow(!busy && !installing);
+	m_ManageUpdateFiles.EnableWindow(!busy && !installing);
 	std::wstring status = state.message;
 	if (busy && m_update->cancel.load()) status = L"Cancelling the update request...";
 	if (state.release.size) {
@@ -339,6 +346,12 @@ bool CAbout::CanInstallUpdate()
 	return true;
 }
 
+void CAbout::OnManageUpdateFiles()
+{
+	try { ditto_update::ManageUpdateCache(reinterpret_cast<uintptr_t>(m_hWnd)); }
+	catch (const std::exception& error) { AfxMessageBox(ditto_update::DiagnosticText(error.what()).c_str()); }
+}
+
 void CAbout::OnInstallUpdate()
 {
 	using namespace ditto_update;
@@ -372,6 +385,7 @@ void CAbout::OnInstallUpdate()
 	try {
 		std::thread([session, ready, executable, database, pid, window, unsignedConsent] {
 			try { LaunchInstallHelper(ready, executable, database, pid, window, unsignedConsent); }
+			catch (const Cancelled&) { session->Set(Phase::Cancelled, L"Installation cancelled. No installer will run later."); }
 			catch (const std::exception& error) { session->Set(Phase::Failed, DiagnosticText(error.what())); }
 		}).detach();
 	} catch (const std::exception& error) { session->Set(Phase::Failed, DiagnosticText(error.what())); }
