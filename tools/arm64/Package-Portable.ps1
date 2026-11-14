@@ -78,7 +78,7 @@ The portable marker keeps this build's settings and database beside the executab
 This is an unsigned community build, not an official Ditto release.
 See build-info.json for the version, stable/beta channel and upstream baseline.
 Avoid running two clipboard managers with the same global hotkey during normal use.
-Built by steathy@github. See docs/arm64/STATUS.md in the source checkout for port status.
+Built by steathy@github. See ReadMe.md in the source checkout for project and upstream information.
 '@ | Set-Content -LiteralPath (Join-Path $OutputDirectory 'ARM64-README.txt') -Encoding utf8
 $zipPath = $OutputDirectory + '.zip'
 if (Test-Path -LiteralPath $zipPath) { throw "Archive already exists: $zipPath" }

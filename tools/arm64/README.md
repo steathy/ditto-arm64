@@ -14,7 +14,7 @@ On an ARM64 laptop the script selects native ARM64 MSBuild and compiler tools. O
 
 `Directory.Build.targets` removes the local repository prefix from compiled source-file diagnostics and records only the PDB filename in shipped binaries. Packaging rejects binaries containing Windows user-directory paths. PDBs and build logs remain local. The MSVC prefix-mapping option was checked with the supported v145 compiler.
 
-`Package-Portable.ps1` creates a new timestamped folder and ZIP under `artifacts`. It bundles Ditto, its update helper, ICU_Loader, DittoUtil, language/theme data, and required ARM64 runtime DLLs from Visual Studio's redistributable directory. Every shipped EXE/DLL must have an ARM64 PE header. The package is an unsigned development build; signing remains separate work. GitHub Actions runs the build, native tests and packaging on `windows-11-vs2026-arm`; see [automated releases](../../docs/arm64/RELEASING.md).
+`Package-Portable.ps1` creates a new timestamped folder and ZIP under `artifacts`. It bundles Ditto, its update helper, ICU_Loader, DittoUtil, language/theme data, and required ARM64 runtime DLLs from Visual Studio's redistributable directory. Every shipped EXE/DLL must have an ARM64 PE header. The package is an unsigned development build; signing remains separate work. GitHub Actions runs the build, native tests and packaging on `windows-11-vs2026-arm`; see [the release workflow](../../.github/workflows/arm64-release.yml).
 
 To test a produced package on Windows ARM64, use the directory path printed by the packaging command:
 
@@ -127,4 +127,21 @@ Results, executable headers and logs are saved in timestamped directories under 
 
 The dependency script compiles the checked-out SQLite Multiple Ciphers, TinyXML, QR and ChaiScript sources. The Windows test calls ICU and checks system DLL loading without exercising full UI, COM or mail behavior. The zlib script builds upstream 1.3.2 at commit `da607da739fa6047df13e66a2af6b8bec7c2a498` and runs its configured CTest suite on ARM64.
 
-Read `docs\arm64\STATUS.md` for port status and remaining validation work. The standalone dependency probes do not change project settings.
+## Release automation
+
+Use PowerShell 7 for `New-ReleaseAssets.ps1` and release publication. Branch pushes
+build/test and upload Actions artifacts; matching version tags additionally publish
+a release and update the corresponding feed channel. Add public notes at
+`build/release-notes/<four-part-version>.md`, update both version definitions in
+`src/Arm64BuildInfo.h`, and verify the source metadata before tagging. Stable uses
+`main`; beta uses `nightly`. Shared workflows must match before a tag build.
+
+Publish only after the branch checks and required manual installation tests pass.
+Create an annotated `v<four-part-version>` tag on the declared release branch and
+push it to GitHub. CI verifies the three release assets before publishing; it never
+replaces an existing published version with different binaries. Fetch and merge the
+resulting feed commit before mirroring source to Gitea. The standalone dependency
+probes do not change project settings.
+
+Internal reviews, plans and machine reports under `docs/` are intentionally ignored
+and must not be committed or included in source archives.

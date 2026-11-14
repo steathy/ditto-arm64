@@ -17,7 +17,7 @@ were omitted. ARM64 build and packaging scripts replace the relevant automation.
 Upstream Git history was not imported into this initial source snapshot.
 This stable branch restores the application and bundled library sources from the
 official stable tag, then retains the ARM64 port, About page and fork updater.
-See [the stable baseline audit](docs/arm64/STABLE_BASELINE.md).
+The machine-readable baseline is recorded in [build/source-info.json](build/source-info.json).
 
 ## License
 
