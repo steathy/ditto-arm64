@@ -73,6 +73,7 @@ std::wstring StartupCommand() {
 }
 int RunHelper() {
     std::wstring executable, backup;
+    bool backupCreated = false;
     InstallLog log;
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     try {
@@ -129,9 +130,10 @@ int RunHelper() {
         log.Write("Verifying installer " + manifest.release.version.String() + ".");
         VerifyHash(installer.get(), manifest.release, cancel);
         VerifyPublisher(installer.get(), installerPath, manifest.release.version, L"Ditto ARM64", unsignedConsent);
+        const auto originalVersion = FileVersion(executable);
         {
             auto app = LockFile(executable);
-            VerifyPublisher(app.get(), executable, FileVersion(executable), L"Ditto ARM64", unsignedConsent);
+            VerifyPublisher(app.get(), executable, originalVersion, L"Ditto ARM64", unsignedConsent);
         }
         auto startup = StartupCommand();
         backup = PrivateCacheRoot() + L"\\backup-" + UniqueName();
@@ -169,24 +171,35 @@ int RunHelper() {
         actions.backup = [&] {
             log.Write("Ditto exited; creating backup.");
             EnsurePrivateDirectory(backup);
+            backupCreated = true;
             BackupInstallation(application, database, backup, startup, ExportSettings);
             log.Write("Backup complete: " + Utf8(backup));
         };
-        actions.install = [&] {
+        actions.install = [&](const std::function<void()>& started) {
             std::wstring parameters = L"/SP- /SILENT /NORESTART /RESTARTEXITCODE=3010 /NOCLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /DIR=\"" + application + L"\" ";
             parameters += startup.empty() ? L"/TASKS=\"\"" : L"/TASKS=RunAtStartup";
             log.InspectPath("Installer", installerPath);
             log.Write("Requesting Windows elevation.");
             auto setup = LaunchInstallerProcess(installerPath, parameters);
+            started();
             log.Write("Installer started; process ID " + std::to_string(GetProcessId(setup.get())) + ".");
             if (WaitForSingleObject(setup.get(), INFINITE) != WAIT_OBJECT_0) throw Error("Could not wait for the installer.");
             if (!GetExitCodeProcess(setup.get(), &installerCode) || (installerCode != 0 && installerCode != 3010))
                 throw Error("Installer did not complete successfully (exit " + std::to_string(installerCode) + ").");
         };
+        std::shared_ptr<void> restartLock;
         actions.verify = [&] {
-            auto app = LockFile(executable);
-            VerifyPublisher(app.get(), executable, manifest.release.version, L"Ditto ARM64", unsignedConsent);
+            restartLock = LockFile(executable);
+            VerifyPublisher(restartLock.get(), executable, manifest.release.version, L"Ditto ARM64", unsignedConsent);
             log.Write("Installed application version and publisher verified.");
+        };
+        actions.verifyRecovery = [&] {
+            restartLock = LockFile(executable);
+            auto version = FileVersion(executable);
+            if (!(version == originalVersion) && !(version == manifest.release.version))
+                throw Error("Setup left an unexpected application version.");
+            VerifyPublisher(restartLock.get(), executable, version, L"Ditto ARM64", unsignedConsent);
+            log.Write("Application left by failed Setup verified before recovery restart.");
         };
         actions.restart = [&] { RestartAndWait(executable); log.Write("Ditto confirmed a working database and main window."); };
         auto result = RunInstallTransaction(actions);
@@ -212,11 +225,7 @@ int RunHelper() {
         if (!result.success) {
             log.Write(result.verified ? "Installation verified; startup was not confirmed." : "Update did not complete; recovery was attempted before formatting the diagnostic.");
             if (result.recovered) log.Write("Ditto restarted after failure.");
-            auto message = result.verified ? L"Ditto ARM64 " + Wide(manifest.release.version.String()) +
-                L" was installed and verified, but startup was not confirmed.\n\n" + result.error :
-                (result.installed ? L"Setup completed, but the installed application could not be verified.\n\n" : std::wstring()) + result.error;
-            if (fs::exists(backup)) message += L"\n\nBackup location: " + backup;
-            else if (!result.verified) message += L"\n\nFailed-attempt backups are not retained.";
+            auto message = InstallFailureMessage(result, manifest.release.version, backup, backupCreated);
             message += L"\n\nUpdate log: " + log.path + cleanupWarning;
             MessageBoxW(nullptr, message.c_str(), result.verified ? L"Installed - check Ditto startup" : L"Ditto ARM64 update", MB_OK | MB_ICONEXCLAMATION | MB_SETFOREGROUND);
             CoUninitialize(); return 1;
@@ -230,12 +239,12 @@ int RunHelper() {
     } catch (const std::exception& error) {
         log.Write(std::string("Failure: ") + error.what());
         std::wstring message = DiagnosticText(error.what());
-        if (!backup.empty()) message += L"\n\nBackup location: " + backup;
+        message += BackupStatusMessage(backup, backupCreated);
         if (!log.path.empty()) message += L"\n\nUpdate log: " + log.path;
         MessageBoxW(nullptr, message.c_str(), L"Ditto ARM64 update", MB_OK | MB_ICONEXCLAMATION | MB_SETFOREGROUND);
         CoUninitialize(); return 1;
     } catch (...) {
-        MessageBoxW(nullptr, L"An unexpected update error occurred. Check Ditto and open it from the Start menu if needed.", L"Ditto ARM64 update", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
+        MessageBoxW(nullptr, L"An unexpected update error occurred. Check the installation before starting Ditto; reinstall a known release if needed.", L"Ditto ARM64 update", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
         CoUninitialize(); return 1;
     }
 }
@@ -243,7 +252,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // Covers exceptions raised inside an error handler as well as the main body.
     try { return RunHelper(); }
     catch (...) {
-        MessageBoxW(nullptr, L"The update could not finish. Check Ditto and open it from the Start menu if needed. Recovery backups have been retained.",
+        MessageBoxW(nullptr, L"The update could not finish. Check the installation before starting Ditto; reinstall a known release if needed. The backup status could not be determined.",
             L"Ditto ARM64 update", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
         CoUninitialize(); return 1;
     }

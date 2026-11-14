@@ -348,8 +348,11 @@ bool CAbout::CanInstallUpdate()
 
 void CAbout::OnManageUpdateFiles()
 {
-	try { ditto_update::ManageUpdateCache(reinterpret_cast<uintptr_t>(m_hWnd)); }
+	m_promptShown = true; // Do not open an install prompt inside the cleanup dialog.
+	try { ditto_update::ManageUpdateCache(reinterpret_cast<uintptr_t>(m_hWnd), false, m_update.get()); }
 	catch (const std::exception& error) { AfxMessageBox(ditto_update::DiagnosticText(error.what()).c_str()); }
+	if (m_update) ditto_update::ResetMissingReadyDownload(*m_update);
+	RefreshUpdate();
 }
 
 void CAbout::OnInstallUpdate()
@@ -372,7 +375,7 @@ void CAbout::OnInstallUpdate()
 		content += L"The download matches the feed's size and SHA-256, but that does not establish who created it. Continue only if you trust this release.\n\n";
 		dialog.pszMainIcon = TD_WARNING_ICON;
 	}
-	content += L"Save and close any external clip editors first. Ditto will close while the update is installed. A backup will preserve your settings and clipboard history. Windows will ask for installation permission.";
+	content += L"Save and close any external clip editors first. Ditto will close while the update is installed. A temporary backup of your settings and clipboard history is made before installation. The newest two successful-installation backups and two legacy backups are kept; failed-attempt backups are removed after recovery is attempted. A failed installation may require reinstalling a known release. Windows will ask for installation permission.";
 	dialog.pszContent = content.c_str();
 	dialog.cButtons = 2; dialog.pButtons = buttons; dialog.nDefaultButton = IDCANCEL;
 	int selected = IDCANCEL;

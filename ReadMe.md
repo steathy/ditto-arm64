@@ -10,8 +10,8 @@ with or endorsed by the original Ditto project or its maintainers.
 the official stable release, pinned to commit
 [`81a667c`](https://github.com/sabrogden/Ditto/commit/81a667c790f5a6c9b6b63f187eb75e79bf159670).
 
-**This branch's ARM64 build:** `3.25.113.4` — **Stable Build** (maintenance candidate)
-(upstream stable 3.25.113.0, ARM64 revision 4).
+**This branch's ARM64 build:** `3.25.113.5` — **Stable Build** (maintenance candidate)
+(upstream stable 3.25.113.0, ARM64 revision 5).
 Project and updates: [steathy/ditto-arm64](https://github.com/steathy/ditto-arm64).
 
 | Download | ARM64 version | Upstream baseline |
@@ -52,8 +52,8 @@ release. See the [original project](https://github.com/sabrogden/Ditto) and its
   incorrect hashes and invalid signatures are blocked. Installation uses a separate helper for backup,
   graceful shutdown, Windows elevation and restart, followed by a success dialog.
   Launch errors are reported visibly and recorded in a local update log. Unsaved
-  Options edits block installation. Backups have a retention policy; old unclassified
-  backups require explicit removal. Transient download failures are retried safely.
+  Options edits block installation. Backups retain the newest two successful installations and two legacy copies;
+  failed-attempt backups are removed after recovery is attempted. Transient download failures are retried safely.
 
 The port retains Ditto's existing clipboard capture, history, search and paste
 features; it does not intentionally redesign their core behavior. Version-specific changes are listed in the public release notes.

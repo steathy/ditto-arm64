@@ -18,25 +18,73 @@ void MaintenanceChecks(const std::wstring& root) {
         actions.waiting = [&] { calls += 'p'; return true; };
         actions.cancelClose = [] { return false; };
         actions.backup = [&] { calls += 'b'; if (fault == 2) throw std::runtime_error("backup caf\xe9 failed"); };
-        actions.install = [&] { calls += 'i'; if (fault == 3) throw Error("UAC cancelled"); };
+        actions.install = [&](const std::function<void()>& started) { calls += 'i'; if (fault == 3) throw Error("UAC cancelled"); started(); };
         actions.verify = [&] { calls += 'v'; if (fault == 4) throw Error("installed version differs"); };
+        actions.verifyRecovery = [] {};
         actions.restart = [&] { ++starts; calls += 'r'; if (fault == 5) throw Error("restart failed"); };
         auto result = RunInstallTransaction(actions);
         Require(result.success == (fault == 0 || fault == 6), "installation transaction reports failures");
-        Require(starts == (fault == 1 ? 0 : 1), "closed application recovers exactly once");
+        Require(starts == (fault == 1 || fault == 4 ? 0 : 1), "recovery starts at most once and never bypasses failed target verification");
         if (fault == 2) Require(calls == "cwbr" && result.recovered && !result.error.empty(), "backup failure recovers before displaying non-UTF8 error");
-        if (fault == 3 || fault == 4) Require(result.recovered, "cancelled or failed installation restarts Ditto");
-        if (fault == 4) Require(result.installed && !result.verified, "completed Setup is distinct from failed installed-file verification");
+        if (fault == 3) Require(result.recovered && !result.installerStarted, "cancelled UAC restores the original application without claiming Setup started");
+        if (fault == 4) Require(result.installerStarted && result.installed && !result.verified && result.restartBlocked && !result.recovered, "failed installed-file verification leaves Ditto closed");
         if (fault == 5) Require(result.installed && result.verified && !result.success, "verified installation is distinct from unconfirmed startup");
         if (fault == 6) Require(waits == 2 && calls == "cwpwbivr", "late shutdown stays monitored until install/restart finishes");
     }
     {
         InstallActions actions;
         actions.close = [] {}; actions.waitForExit = [](uint32_t) { return true; }; actions.waiting = [] { return true; };
-        actions.backup = [] { throw 42; }; actions.install = actions.verify = [] {};
+        actions.backup = [] { throw 42; }; actions.verify = [] {};
+        actions.install = [](const std::function<void()>& started) { started(); };
         bool restarted = false; actions.restart = [&] { restarted = true; };
         auto result = RunInstallTransaction(actions);
         Require(restarted && result.recovered && !result.error.empty(), "non-standard exceptions recover too");
+    }
+    for (bool valid : {false, true}) {
+        InstallActions a; std::string order;
+        a.close = [] {}; a.waitForExit = [](uint32_t) { return true; }; a.backup = [] {};
+        a.install = [&](const std::function<void()>& started) { started(); order += 'i'; throw Error("partial Setup failure"); };
+        a.verify = [] { throw Error("normal verification should not be reached"); };
+        a.verifyRecovery = [&] { order += 'v'; if (!valid) throw Error("bad executable"); };
+        a.restart = [&] { order += 'r'; };
+        auto result = RunInstallTransaction(a);
+        Require(result.installerStarted && !result.installed && !result.verified, "failed Setup reports launch independently of success");
+        Require(order == (valid ? "ivr" : "iv") && result.recovered == valid && result.restartBlocked != valid, "failed Setup restarts only after recovery verification succeeds");
+        if (!valid) Require(result.error.find(L"Reinstall a known") != std::wstring::npos, "blocked recovery explains repair instead of suggesting an unverified launch");
+    }
+    {
+        auto backup = root + L"\\diagnostic-backup";
+        Require(BackupStatusMessage(backup, false).find(backup) == std::wstring::npos && BackupStatusMessage(backup, false).find(L"No update backup") != std::wstring::npos, "a chosen but uncreated backup path is never advertised");
+        EnsurePrivateDirectory(backup);
+        Require(BackupStatusMessage(backup, true).find(backup) != std::wstring::npos, "an existing backup folder is reported");
+        fs::remove(backup);
+        Require(BackupStatusMessage(backup, true).find(L"was removed") != std::wstring::npos, "a created and removed backup is distinguished from no backup");
+        InstallResult cancelled; cancelled.cancelled = true; cancelled.error = L"Restart readiness timed out.";
+        auto message = InstallFailureMessage(cancelled, Version::Parse("3.25.113.5"), backup, false);
+        Require(message.find(L"No installer was started") != std::wstring::npos && message.find(L"No update backup was created") != std::wstring::npos && message.find(L"was removed") == std::wstring::npos, "cancelled close with unconfirmed restart cannot claim a failed backup was deleted");
+        InstallResult slow; slow.installerStarted = slow.installed = slow.verified = true; slow.error = L"readiness timeout";
+        Require(InstallFailureMessage(slow, Version::Parse("3.25.113.5"), backup, false).find(L"installed and verified") != std::wstring::npos, "slow-start message preserves verified installation outcome");
+    }
+    {
+        auto cache = root + L"\\ready-cleanup"; EnsurePrivateDirectory(cache);
+        auto download = cache + L"\\stable-3.25.113.5-" + std::wstring(64, L'a'); EnsurePrivateDirectory(download);
+        auto installer = download + L"\\installer.exe"; WriteNewFile(installer, "fixture, never executed");
+        Session session; session.state.phase = Phase::Ready; session.state.installerPath = installer;
+        session.state.release.size = 123; session.state.downloaded = 123; session.state.manifestPath = L"fixture manifest";
+        Require(!ResetMissingReadyDownload(session) && session.Read().phase == Phase::Ready, "cancelled cleanup leaves an existing ready download unchanged");
+        auto lockedBackup = cache + L"\\backup-" + UniqueName(); EnsurePrivateDirectory(lockedBackup);
+        auto lockedPath = lockedBackup + L"\\held.txt"; WriteNewFile(lockedPath, "fixture");
+        auto held = LockFile(lockedPath);
+        auto cleanup = RemoveUpdateCache(cache);
+        Require(!cleanup.retained.empty() && !fs::exists(installer), "partial cleanup can remove the waiting download while retaining a locked backup");
+        Require(ResetMissingReadyDownload(session), "cleanup invalidates a removed ready download");
+        auto state = session.Read();
+        Require(state.phase == Phase::Idle && state.installerPath.empty() && state.manifestPath.empty() && !state.release.size && !state.downloaded, "cleanup clears all stale installation and progress metadata");
+        Require(!ResetMissingReadyDownload(session), "cleanup leaves non-ready states alone");
+        held.reset(); RemoveUpdateCache(cache);
+        EnsurePrivateDirectory(download); WriteNewFile(installer, "fixture");
+        session.state.phase = Phase::Ready; session.state.installerPath = installer;
+        Require(RemoveUpdateCache(cache).retained.empty() && ResetMissingReadyDownload(session), "completed cleanup also invalidates the waiting download");
     }
     {
         struct Interrupted : Transport {
@@ -120,7 +168,7 @@ void MaintenanceChecks(const std::wstring& root) {
         InstallActions actions; int installs = 0, starts = 0;
         actions.close = [] {}; actions.waitForExit = [](uint32_t) { return false; };
         actions.waiting = [] { return false; }; actions.cancelClose = [=] { return lateExit; };
-        actions.backup = actions.verify = [] {}; actions.install = [&] { ++installs; }; actions.restart = [&] { ++starts; };
+        actions.backup = actions.verify = [] {}; actions.install = [&](const std::function<void()>& started) { started(); ++installs; }; actions.restart = [&] { ++starts; };
         auto result = RunInstallTransaction(actions);
         Require(result.cancelled && !result.installed && installs == 0 && starts == (lateExit ? 1 : 0), "cancellation never installs and recovers a late exit exactly once");
     }

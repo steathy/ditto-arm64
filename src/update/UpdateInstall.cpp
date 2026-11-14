@@ -136,7 +136,8 @@ InstallResult RunInstallTransaction(const InstallActions& actions) {
             }
         }
         stopped = true;
-        actions.backup(); actions.install(); result.installed = true;
+        actions.backup();
+        actions.install([&] { result.installerStarted = true; }); result.installed = true;
         actions.verify(); result.verified = true;
         // Once a restart has been attempted, do not launch a second instance if
         // its readiness signal times out. The diagnostic tells the user to check it.
@@ -144,7 +145,16 @@ InstallResult RunInstallTransaction(const InstallActions& actions) {
     } catch (...) {
         auto failure = std::current_exception();
         // Recovery precedes all error-message allocation/conversion.
-        if (stopped) {
+        if (stopped && result.installerStarted) {
+            // A failed target verification must never be bypassed by recovery.
+            // If Setup itself failed, inspect what it left before any restart.
+            if (result.installed) result.restartBlocked = true;
+            else {
+                try { actions.verifyRecovery(); }
+                catch (...) { result.restartBlocked = true; }
+            }
+        }
+        if (stopped && !result.restartBlocked) {
             try { actions.restart(); result.recovered = true; }
             catch (...) { /* Report the original failure even if restart failed. */ }
         }
@@ -152,9 +162,39 @@ InstallResult RunInstallTransaction(const InstallActions& actions) {
         catch (const std::exception& error) { result.error = DiagnosticText(error.what()); }
         catch (...) { result.error = L"An unexpected update error occurred."; }
         if (result.error.empty()) result.error = L"The update could not be completed.";
-        if (stopped && !result.recovered) result.error += L"\n\nDitto could not be restarted. Open it from the Start menu.";
+        if (result.restartBlocked)
+            result.error += L"\n\nDitto was not restarted because the installed application could not be verified. Reinstall a known Ditto ARM64 release before opening it.";
+        else if (stopped && !result.recovered)
+            result.error += L"\n\nDitto startup could not be confirmed. Check whether it is already running before opening it again.";
     }
     return result;
+}
+std::wstring BackupStatusMessage(const std::wstring& directory, bool created) {
+    std::error_code error;
+    bool exists = !directory.empty() && fs::exists(directory, error);
+    if (error) return L"\n\nThe backup status could not be checked. See the update log for details.";
+    if (exists) return L"\n\nBackup folder: " + directory;
+    return created ? L"\n\nThe update backup folder was removed."
+        : L"\n\nNo update backup was created.";
+}
+std::wstring InstallFailureMessage(const InstallResult& result, const Version& target,
+    const std::wstring& backup, bool backupCreated) {
+    std::wstring message;
+    if (result.verified) message = L"Ditto ARM64 " + Wide(target.String()) + L" was installed and verified, but startup was not confirmed.\n\n";
+    else if (result.installed) message = L"Setup completed, but the installed application could not be verified.\n\n";
+    else if (result.cancelled) message = L"The update was cancelled. No installer was started.\n\n";
+    else if (result.installerStarted) message = L"Setup started but did not complete successfully.\n\n";
+    else message = L"The update stopped before the installer was started.\n\n";
+    return message + result.error + BackupStatusMessage(backup, backupCreated);
+}
+bool ResetMissingReadyDownload(Session& session) {
+    std::lock_guard<std::mutex> lock(session.mutex);
+    if (session.state.phase != Phase::Ready) return false;
+    std::error_code error;
+    if (fs::is_regular_file(session.state.installerPath, error) && !error) return false;
+    session.state = Snapshot{};
+    session.state.message = L"The downloaded installer is no longer available. Check Update to download it again.";
+    return true;
 }
 uint32_t UpdateShutdownMessage() {
     static UINT message = RegisterWindowMessageW(L"DittoARM64.CancelableShutdown.v1");
@@ -323,10 +363,14 @@ CacheInventory InspectUpdateCache(const std::wstring& rootText) {
     }
     return result;
 }
-void ManageUpdateCache(uintptr_t owner, bool uninstall) {
+void ManageUpdateCache(uintptr_t owner, bool uninstall, Session* session) {
     // A different administrator, or a session with no identifiable shell, must
     // not receive a misleading offer to clean the desktop user's profile.
-    if (uninstall && !IsCurrentInteractiveUser()) return;
+    if (uninstall && !IsCurrentInteractiveUser()) {
+        MessageBoxW(reinterpret_cast<HWND>(owner), L"Automatic cleanup was skipped because this uninstaller's account could not be matched to the desktop user.\n\nUpdate backups containing clipboard history may remain in the original user's %LOCALAPPDATA%\\DittoARM64-Updates folder.\n\nUse About > Manage update files before uninstalling, or sign in as the original user to review and remove unwanted backup and download folders afterwards. No other user's profile was examined.",
+            L"Update backups may remain", MB_OK | MB_ICONINFORMATION);
+        return;
+    }
     auto root = UpdateCachePath(); auto inventory = InspectUpdateCache(root);
     auto window = reinterpret_cast<HWND>(owner);
     if (inventory.Empty() && inventory.unreadable.empty()) {
@@ -343,6 +387,7 @@ void ManageUpdateCache(uintptr_t owner, bool uninstall) {
     if (!inventory.unreadable.empty()) prompt << L"\n\nSome items could not be inspected. Cleanup will report any items it cannot remove.";
     if (MessageBoxW(window, prompt.str().c_str(), L"Manage update files", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) return;
     auto result = RemoveUpdateCache(root);
+    if (session) ResetMissingReadyDownload(*session);
     std::wstring message = std::to_wstring(result.removed) + L" update-cache folders removed.";
     if (result.retained.empty()) message += L"\n\nYour live database, settings and rollback-protection records were kept.";
     else {

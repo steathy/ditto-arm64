@@ -56,7 +56,7 @@ This checks for generated/sensitive files, common credential patterns, local acc
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\arm64\Test-Updater.ps1
 ```
 
-This runs 185 native fixture checks without using personal clipboard data or
+This runs 200 native fixture checks without using personal clipboard data or
 installing software. Add `-LiveFeed` to test the actual GitHub feed request too.
 Signed-ready fixtures use an explicitly injected test verifier; unsigned PE checks
 use the production verifier with an unsigned test executable. The shipped client

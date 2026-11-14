@@ -5,7 +5,9 @@ namespace ditto_update {
 // Shared by the real helper and fault-injection tests. The caller supplies only
 // local operations; nothing in the feed or handoff can replace these callbacks.
 struct InstallActions {
-    std::function<void()> close, backup, install, verify, restart;
+    std::function<void()> close, backup, verify, verifyRecovery, restart;
+    // Call started immediately after Setup launches, before waiting for it.
+    std::function<void(const std::function<void()>& started)> install;
     // false cancels installation. cancelClose returns true only if Ditto has
     // already exited and needs restarting; it must neutralize any queued close.
     std::function<bool()> waiting, cancelClose;
@@ -13,10 +15,15 @@ struct InstallActions {
 };
 struct InstallResult {
     bool success = false, recovered = false, cancelled = false;
-    bool installed = false, verified = false;
+    bool installerStarted = false, installed = false, verified = false;
+    bool restartBlocked = false;
     std::wstring error;
 };
 InstallResult RunInstallTransaction(const InstallActions& actions);
+std::wstring BackupStatusMessage(const std::wstring& directory, bool created);
+std::wstring InstallFailureMessage(const InstallResult& result, const Version& target,
+    const std::wstring& backup, bool backupCreated);
+bool ResetMissingReadyDownload(Session& session);
 void BackupInstallation(const std::wstring& application, const std::wstring& database,
     const std::wstring& directory, const std::wstring& startup,
     const std::function<void(const std::wstring&)>& exportSettings);
@@ -56,5 +63,5 @@ CleanupResult PruneUpdateCache(const std::wstring& root, const std::wstring& act
 // Explicit removal uses the same confined, link-rejecting deletion as retention.
 CleanupResult RemoveUpdateCache(const std::wstring& root);
 CacheInventory InspectUpdateCache(const std::wstring& root);
-void ManageUpdateCache(uintptr_t owner, bool uninstall = false);
+void ManageUpdateCache(uintptr_t owner, bool uninstall = false, Session* session = nullptr);
 }
