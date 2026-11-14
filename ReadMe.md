@@ -36,9 +36,8 @@ release. See the [original project](https://github.com/sabrogden/Ditto) and its
 [wiki](https://github.com/sabrogden/Ditto/wiki) for features, usage and documentation.
 
 - [Build instructions](tools/arm64/README.md)
-- [Downloads](https://github.com/steathy/ditto-arm64/releases) and [automated releases](docs/arm64/RELEASING.md)
-- [Port status](docs/arm64/STATUS.md)
-- [Update mechanism and release setup](docs/arm64/UPDATER_DESIGN.md)
+- [Downloads](https://github.com/steathy/ditto-arm64/releases)
+- [Automated builds and releases](.github/workflows/arm64-release.yml)
 - [Upstream provenance and credits](UPSTREAM.md)
 
 ## Changes in this fork
@@ -58,8 +57,7 @@ release. See the [original project](https://github.com/sabrogden/Ditto) and its
   backups require explicit removal. Transient download failures are retried safely.
 
 The port retains Ditto's existing clipboard capture, history, search and paste
-features; it does not intentionally redesign their core behavior. Compatibility
-fixes and packaging changes are documented in the port status above.
+features; it does not intentionally redesign their core behavior. Version-specific changes are listed in the public release notes.
 
 Current builds are unsigned. Tagged builds are tested and published by GitHub
 Actions; nightly builds are prereleases in the beta update channel. Users can

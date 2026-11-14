@@ -13,9 +13,10 @@
 **/Win32/
 **/Release*/
 **/Debug*/
-# Release notes are source, not build output.
-!/docs/releases/
-!/docs/releases/**
+# Internal documentation stays local; public release notes live under build.
+/docs/
+!/build/release-notes/
+!/build/release-notes/**
 # Upstream keeps source-controlled translations and themes under Debug.
 !/Debug/
 /Debug/*
@@ -88,7 +89,6 @@
 *.bak
 *.lnk
 /backups/
-/docs/arm64/evidence/
 
 # Credentials and signing material
 .env

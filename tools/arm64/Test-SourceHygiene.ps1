@@ -24,7 +24,7 @@ if ($env:COMPUTERNAME -and $env:COMPUTERNAME.Length -ge 5) {
 }
 $binaryAssets = '(?i)\.(png|bmp|ico|cur|gif|avi)$'
 foreach ($relative in $files) {
-    if ($relative -match $forbiddenExtension -or $relative -match '^(work|artifacts|backups)/' -or $relative -match '^docs/arm64/evidence/') {
+    if ($relative -match $forbiddenExtension -or $relative -match '^(work|artifacts|backups|docs)/') {
         $issues.Add([pscustomobject]@{file=$relative;category='generated-or-sensitive-file'})
         continue
     }
@@ -52,14 +52,14 @@ foreach ($relative in $files) {
 $required = @('LICENSE','ReadMe.md','UPSTREAM.md','src/About.cpp','CP_Main.vcxproj',
     'Directory.Build.props','Directory.Build.targets','build/arm64-dependencies.props','build/source-info.json',
     'tools/arm64/Build-Arm64.ps1','tools/arm64/Package-Portable.ps1','tools/arm64/Build-Installer.ps1',
-    'docs/arm64/STATUS.md','Debug/Language/English.xml','Debug/Themes/Classic.xml')
+    'Debug/Language/English.xml','Debug/Themes/Classic.xml')
 foreach ($relative in $required) {
     if ($relative -notin $files) { $issues.Add([pscustomobject]@{file=$relative;category='required-file-not-staged'}) }
     & git -C $repoRoot check-ignore --no-index --quiet -- $relative
     if ($LASTEXITCODE -eq 0) { $issues.Add([pscustomobject]@{file=$relative;category='source-incorrectly-ignored'}) }
 }
 foreach ($relative in @('work/private.txt','artifacts/backups/history.db','example.pfx','project.vcxproj.user',
-    'ARM64/Release/Ditto.exe','docs/arm64/evidence/machine.json','CP_Main_i.c','CP_Main_i.h')) {
+    'ARM64/Release/Ditto.exe','docs/arm64/STATUS.md','docs/releases/private-note.md','docs/arm64/evidence/machine.json','CP_Main_i.c','CP_Main_i.h')) {
     & git -C $repoRoot check-ignore --no-index --quiet -- $relative
     if ($LASTEXITCODE -ne 0) { $issues.Add([pscustomobject]@{file=$relative;category='ignore-rule-missing'}) }
 }

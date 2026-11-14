@@ -20,6 +20,6 @@ if ($source.upstreamCommit -notmatch '^[0-9a-f]{40}$' -or
 if (($version.Split('.')[0..2] -join '.') -ne ($source.upstreamVersion.Split('.')[0..2] -join '.')) { throw 'ARM64 version does not match its upstream baseline.' }
 if ($channel -eq 'stable' -and $source.upstreamTag -ne $source.upstreamVersion) { throw 'Stable builds require an upstream release tag.' }
 if ($Tag -and $Tag -cne "v$version") { throw "Tag must exactly match v$version." }
-$notesPath = Join-Path $repoRoot "docs/releases/$version.md"
+$notesPath = Join-Path $repoRoot "build/release-notes/$version.md"
 if ($Tag -and !(Test-Path -LiteralPath $notesPath)) { throw 'Add release notes before pushing a version tag.' }
 [pscustomobject]@{version=$version;tag="v$version";channel=$channel;notesPath=$notesPath;releaseBranch=$source.releaseBranch;upstreamCommit=$source.upstreamCommit;upstreamVersion=$source.upstreamVersion;upstreamTag=$source.upstreamTag}
