@@ -11,14 +11,14 @@ plus subsequent `master` changes, pinned to commit
 [`a80fd35`](https://github.com/sabrogden/Ditto/commit/a80fd3536bc407cac8cce43b5682022282ace983)
 (September 30, 2026; upstream tag `build-number-146`).
 
-**This branch's ARM64 build:** `3.25.146.13` - **Nightly Build** (maintenance candidate)
+**This branch's ARM64 build:** `3.25.146.13` - **Nightly Build**
 (upstream nightly build 146, ARM64 revision 13).
 Project and updates: [steathy/ditto-arm64](https://github.com/steathy/ditto-arm64).
 
 | Download | ARM64 version | Upstream baseline |
 |---|---|---|
-| [Stable](https://github.com/steathy/ditto-arm64/releases/tag/v3.25.113.3) | 3.25.113.3 | Official stable 3.25.113.0 |
-| [Nightly / beta](https://github.com/steathy/ditto-arm64/releases/tag/v3.25.146.11) | 3.25.146.11 | Nightly build-number-146 |
+| [Stable](https://github.com/steathy/ditto-arm64/releases/tag/v3.25.113.5) | 3.25.113.5 | Official stable 3.25.113.0 |
+| [Nightly / beta](https://github.com/steathy/ditto-arm64/releases/tag/v3.25.146.13) | 3.25.146.13 | Nightly build-number-146 |
 
 Each release has an installer, portable ZIP and source ZIP including zlib.
 Checksums are in the release notes. GitHub also adds repository-only source archives.
